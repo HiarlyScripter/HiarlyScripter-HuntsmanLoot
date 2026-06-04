@@ -100,6 +100,43 @@ O campo `_enemyField` é cacheado como `static readonly` na inicialização do p
 
 ---
 
+## v1.1.2 — 2026-05-20 — Remoção da abordagem REPOLib (drop não funcionava)
+
+**Causa:** A versão anterior (v1.2.0, não publicada) substituiu a abordagem direta de spawn por uma cadeia complexa usando REPOLib. Essa cadeia falhava silenciosamente em múltiplos pontos:
+
+1. `[BepInDependency("REPOLib")]` usava GUID genérico — potencialmente não reconhecido pelo BepInEx.
+2. `REPOLib.Modules.Items.RegisterItem(ItemAttributes)` — assinatura incompatível com a API real do REPOLib (que espera `Item`, não `ItemAttributes`) → `ItemRegistered` nunca virava `true`.
+3. O fallback nativo dependia de `_resourcePathField?.GetValue(nativeItem.prefab)` que retornava `null` silenciosamente se o campo `PrefabRef.resourcePath` não existisse na versão do jogo → `return` sem log, sem drop.
+4. `NativeShotgunItem` dependia de `WaitAndSetupItem` (coroutine com loop de 2s) ou da loja abrir — race condition: Huntsman podia morrer antes de qualquer um dos dois ocorrer.
+
+**Solução aplicada:**
+- Removido REPOLib por completo (usando, BepInDependency, código).
+- `DropRifle()` agora usa path hard-coded `"Items/Item Gun Shotgun"` confirmado como correto em v1.1.3.
+- Singleplayer: `Resources.Load<GameObject>(SHOTGUN_PATH)` + `Object.Instantiate`.
+- Multiplayer: `PhotonNetwork.InstantiateRoomObject(SHOTGUN_PATH, ...)`.
+- `EnemyParent.Enemy` acessado via reflexão (`_enemyParentField`) — campo não é público (skill doc estava incorreto).
+- Logs adicionados em cada etapa crítica do drop para diagnóstico.
+
+**Nota:** `manifest.json` e `thunderstore.toml` não precisaram ser alterados para a remoção do REPOLib — ele nunca foi declarado como dependência nesses arquivos.
+
+---
+
+## v1.1.2-hotfix — 2026-05-20 — Fix barra de munição no chão (SetBatteryLife)
+
+**Causa:** `ApplyAmmo()` setava `numberOfBullets` via reflexão mas não chamava `ItemBattery.SetBatteryLife()`. A barra amarela de munição só aparecia quando o jogador pegava a arma (porque `ItemBattery` sincronizava ao equip), não enquanto o item estava no chão.
+
+**Correção:** Após definir o valor final de `finalAmmo`, obtém `ItemBattery` via `GetComponentInChildren<ItemBattery>()` e chama:
+```csharp
+int bars = battery.batteryBars > 0 ? battery.batteryBars : 4;
+int pct  = (int)Math.Round((float)finalAmmo / bars * 100f);
+battery.SetBatteryLife(pct);  // public — sem reflexão
+```
+`batteryBars` é o número de segmentos da barra (4 para a shotgun). O percentual é calculado proporcionalmente ao máximo de munição.
+
+**Refatoração:** Variável `finalAmmo` unifica todos os code paths (ammo zerada, randomizada, mantida) para que o SetBatteryLife seja chamado uma única vez ao final, independente do branch tomado.
+
+---
+
 ## Arquitetura do mod
 
-- **`Core.cs`** — entrada BepInEx, configurações, busca do item nativo, dois patches Harmony
+- **`Core.cs`** — entrada BepInEx, configs, 3 patches Harmony: `EnemyHunter.Awake` (mesh), `EnemyParent.Despawn` (drop), `Debug.LogWarning` (supressão)
