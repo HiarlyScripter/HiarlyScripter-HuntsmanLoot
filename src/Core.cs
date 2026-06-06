@@ -124,6 +124,19 @@ namespace HuntsmanLoot
         // Visual clonado antes do Despawn — consumido em DropRifle
         private static GameObject _pendingWeaponVisual;
 
+        private static readonly string[] StrongBodyKeywords =
+        {
+            "body", "torso", "skin", "head", "neck", "chest", "spine", "pelvis",
+            "hip", "leg", "foot", "thigh", "calf", "knee", "face", "eye", "jaw",
+            "mouth", "teeth", "hair"
+        };
+
+        private static readonly string[] WeakBodyKeywords =
+        {
+            "arm", "hand", "finger", "thumb", "wrist", "elbow", "shoulder",
+            "clavicle"
+        };
+
         // ── 0. PRE-DESPAWN: captura visual da arma ANTES de o inimigo ser desativado ──
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EnemyParent), "Despawn")]
@@ -159,79 +172,29 @@ namespace HuntsmanLoot
             }
             else
             {
-                HuntsmanLootPlugin.Log.LogError(
-                    "[HuntsmanLoot] Huntsman weapon visual not found — falling back to native shotgun.");
+                HuntsmanLootPlugin.Log.LogWarning(
+                    "[HuntsmanLoot] Huntsman weapon visual not found — keeping native shotgun visible.");
             }
         }
 
         // ── Seletor por score: percorre TODA a hierarquia sem pular subarvores ──
         // Arm/hand penalizam o NO como candidato mas os FILHOS sao sempre explorados.
-        // So pode vencer um no com renderer real e score > 0.
+        // So pode vencer um no com sinal de arma, mesh renderizavel e score > 0.
         static GameObject FindWeaponVisual(Transform root)
         {
-            GameObject bestCandidate = null;
-            int        bestScore     = int.MinValue;
+            WeaponVisualCandidate bestCandidate = null;
 
             var queue = new Queue<Transform>();
             queue.Enqueue(root);
 
             while (queue.Count > 0)
             {
-                var    t = queue.Dequeue();
-                string n = t.name.ToLowerInvariant();
+                var t = queue.Dequeue();
+                var candidate = EvaluateWeaponCandidate(t, root);
+                LogWeaponCandidate(candidate);
 
-                // ── Score por palavra-chave ──────────────────────────────────
-                int score = 0;
-
-                // Positivo forte: nome de arma
-                if (n.Contains("gun") || n.Contains("rifle") ||
-                    n.Contains("weapon") || n.Contains("firearm"))
-                    score += 10;
-                else if (n.Contains("shotgun")) score += 8;
-                else if (n.Contains("barrel"))  score += 5;
-                else if (n.Contains("muzzle"))  score += 2; // geralmente sem mesh
-
-                // Negativo: partes de corpo — penaliza o NO, mas NUNCA pula filhos
-                if      (n.Contains("body")   || n.Contains("torso") || n.Contains("skin")) score -= 20;
-                else if (n.Contains("head"))                                                 score -= 15;
-                else if (n.Contains("arm")    || n.Contains("hand"))                        score -= 15;
-                else if (n.Contains("leg")    || n.Contains("foot"))                        score -= 10;
-
-                // ── Contar renderers reais na subarvore deste no ─────────────
-                int rendererCount = 0, meshCount = 0;
-
-                foreach (var mr in t.GetComponentsInChildren<MeshRenderer>(true))
-                    if (mr.sharedMaterial != null) rendererCount++;
-                foreach (var smr in t.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-                    if (smr.sharedMesh != null) { rendererCount++; meshCount++; }
-                foreach (var mf in t.GetComponentsInChildren<MeshFilter>(true))
-                    if (mf.sharedMesh != null) meshCount++;
-
-                bool hasRenderer = rendererCount > 0;
-                if (hasRenderer)        score += 5;
-                if (rendererCount > 2)  score += 2;
-
-                // ── Candidato valido: tem renderer E score > 0 ───────────────
-                bool isCandidate = hasRenderer && score > 0;
-
-                // ── Log de diagnostico (todos os nos com renderer ou score relevante) ──
-                if (hasRenderer || score > 3)
-                {
-                    string status = isCandidate ? "accepted" : "rejected";
-                    string reason = !hasRenderer ? "no-renderer"
-                                  : score <= 0   ? "score<=0"
-                                  : "ok";
-                    HuntsmanLootPlugin.Log.LogInfo(
-                        $"[HuntsmanLoot] Candidate: path={GetTransformPath(t)}" +
-                        $" score={score} renderers={rendererCount} meshes={meshCount}" +
-                        $" {status} reason={reason}");
-                }
-
-                if (isCandidate && score > bestScore)
-                {
-                    bestScore     = score;
-                    bestCandidate = t.gameObject;
-                }
+                if (candidate.Accepted && IsBetterWeaponCandidate(candidate, bestCandidate))
+                    bestCandidate = candidate;
 
                 // Sempre descer nos filhos — NUNCA pular subarvore
                 for (int i = 0; i < t.childCount; i++)
@@ -241,11 +204,202 @@ namespace HuntsmanLoot
             if (bestCandidate != null)
                 HuntsmanLootPlugin.Log.LogInfo(
                     $"[HuntsmanLoot] Selected Huntsman weapon visual:" +
-                    $" {GetTransformPath(bestCandidate.transform)} (score={bestScore})");
+                    $" {bestCandidate.Path} (score={bestCandidate.Score})");
             else
                 HuntsmanLootPlugin.Log.LogInfo("[HuntsmanLoot] No valid Huntsman weapon visual found");
 
-            return bestCandidate;
+            return bestCandidate?.Transform.gameObject;
+        }
+
+        static WeaponVisualCandidate EvaluateWeaponCandidate(Transform t, Transform root)
+        {
+            string name = t.name.ToLowerInvariant();
+            string path = GetTransformPath(t);
+            string pathLower = path.ToLowerInvariant();
+
+            var stats = GetVisualStats(t);
+            int score = 0;
+
+            bool directWeaponSignal = AddWeaponScore(name, true, ref score);
+            bool pathWeaponSignal = AddWeaponScore(pathLower, false, ref score);
+            bool hasWeaponSignal = directWeaponSignal || pathWeaponSignal;
+
+            bool strongBody = ContainsAny(name, StrongBodyKeywords);
+            bool weakBody = ContainsAny(name, WeakBodyKeywords);
+
+            if (strongBody) score -= 45;
+            if (weakBody) score -= 18;
+
+            if (stats.RenderableMeshCount > 0) score += 8;
+            if (stats.RenderableMeshCount > 1) score += 4;
+            if (stats.RendererCount > 3) score -= 4;
+
+            bool accepted = false;
+            string reason;
+
+            if (t == root)
+                reason = "root-not-weapon";
+            else if (!stats.HasValidVisual)
+                reason = "no-valid-mesh-or-renderer";
+            else if (!hasWeaponSignal)
+                reason = "no-weapon-signal";
+            else if (strongBody && !directWeaponSignal)
+                reason = "body-part";
+            else if (score <= 0)
+                reason = "score<=0";
+            else
+            {
+                accepted = true;
+                reason = "ok";
+            }
+
+            return new WeaponVisualCandidate
+            {
+                Transform = t,
+                Path = path,
+                Score = score,
+                RendererCount = stats.RendererCount,
+                MeshCount = stats.MeshCount,
+                Accepted = accepted,
+                Reason = reason,
+                DirectWeaponSignal = directWeaponSignal,
+                Depth = GetDepth(t, root)
+            };
+        }
+
+        static bool AddWeaponScore(string text, bool directName, ref int score)
+        {
+            if (text.Contains("shotgun"))
+            {
+                score += directName ? 34 : 11;
+                return true;
+            }
+
+            if (text.Contains("gun") || text.Contains("rifle") ||
+                text.Contains("weapon") || text.Contains("firearm"))
+            {
+                score += directName ? 30 : 10;
+                return true;
+            }
+
+            if (text.Contains("barrel") || text.Contains("stock") ||
+                text.Contains("trigger") || text.Contains("pump") ||
+                text.Contains("receiver") || text.Contains("magazine"))
+            {
+                score += directName ? 14 : 5;
+                return true;
+            }
+
+            if (text.Contains("muzzle") || text.Contains("sight") ||
+                text.Contains("scope") || text.Contains("ammo") ||
+                text.Contains("cannon"))
+            {
+                score += directName ? 10 : 3;
+                return true;
+            }
+
+            return false;
+        }
+
+        static VisualStats GetVisualStats(Transform t)
+        {
+            var stats = new VisualStats();
+
+            foreach (var mr in t.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                stats.RendererCount++;
+                var mf = mr.GetComponent<MeshFilter>();
+                if (mf != null && mf.sharedMesh != null)
+                    stats.RenderableMeshCount++;
+            }
+
+            foreach (var smr in t.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                stats.RendererCount++;
+                if (smr.sharedMesh != null)
+                {
+                    stats.MeshCount++;
+                    stats.RenderableMeshCount++;
+                }
+            }
+
+            foreach (var mf in t.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (mf.sharedMesh != null)
+                    stats.MeshCount++;
+            }
+
+            return stats;
+        }
+
+        static void LogWeaponCandidate(WeaponVisualCandidate candidate)
+        {
+            if (candidate.RendererCount == 0 &&
+                candidate.MeshCount == 0 &&
+                candidate.Score <= 0 &&
+                !candidate.DirectWeaponSignal)
+                return;
+
+            string status = candidate.Accepted ? "accepted" : "rejected";
+            HuntsmanLootPlugin.Log.LogInfo(
+                $"[HuntsmanLoot] Candidate: path={candidate.Path}" +
+                $" score={candidate.Score} renderers={candidate.RendererCount}" +
+                $" meshes={candidate.MeshCount} {status} reason={candidate.Reason}");
+        }
+
+        static bool IsBetterWeaponCandidate(
+            WeaponVisualCandidate candidate,
+            WeaponVisualCandidate bestCandidate)
+        {
+            if (bestCandidate == null) return true;
+            if (candidate.Score != bestCandidate.Score)
+                return candidate.Score > bestCandidate.Score;
+            if (candidate.DirectWeaponSignal != bestCandidate.DirectWeaponSignal)
+                return candidate.DirectWeaponSignal;
+            if (candidate.RendererCount != bestCandidate.RendererCount)
+                return candidate.RendererCount > bestCandidate.RendererCount;
+            return candidate.Depth > bestCandidate.Depth;
+        }
+
+        static bool ContainsAny(string text, string[] keywords)
+        {
+            foreach (var keyword in keywords)
+                if (text.Contains(keyword))
+                    return true;
+            return false;
+        }
+
+        static int GetDepth(Transform t, Transform root)
+        {
+            int depth = 0;
+            var cur = t;
+            while (cur != null && cur != root)
+            {
+                depth++;
+                cur = cur.parent;
+            }
+            return depth;
+        }
+
+        private sealed class WeaponVisualCandidate
+        {
+            internal Transform Transform;
+            internal string Path;
+            internal int Score;
+            internal int RendererCount;
+            internal int MeshCount;
+            internal bool Accepted;
+            internal string Reason;
+            internal bool DirectWeaponSignal;
+            internal int Depth;
+        }
+
+        private struct VisualStats
+        {
+            internal int RendererCount;
+            internal int MeshCount;
+            internal int RenderableMeshCount;
+            internal bool HasValidVisual => RenderableMeshCount > 0;
         }
 
         static string GetTransformPath(Transform t)
