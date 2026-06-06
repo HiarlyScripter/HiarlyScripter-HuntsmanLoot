@@ -25,6 +25,7 @@ namespace HuntsmanLoot
         private const float CollisionWidthScale = 1.05f;
         private const float CollisionThicknessScale = 1.10f;
         private const float CollisionMinThickness = 0.04f;
+        private const string DisplayName = "Huntsman Rifle";
 
         internal static void Apply(GameObject spawned, GameObject sourceEnemy, ManualLogSource log)
         {
@@ -694,14 +695,14 @@ namespace HuntsmanLoot
             TryRecordField(typeof(ItemAttributes), "hasIcon", foundFields);
             TryRecordField(typeof(ItemAttributes), "item", foundFields);
 
-            if (TrySetStringField(attr, typeof(ItemAttributes), "itemName", "Huntsman Rifle"))
+            if (TrySetStringField(attr, typeof(ItemAttributes), "itemName", DisplayName))
                 updatedFields.Add("ItemAttributes.itemName");
-            if (TrySetStringField(attr, typeof(ItemAttributes), "promptName", "Huntsman Rifle"))
+            if (TrySetStringField(attr, typeof(ItemAttributes), "promptName", DisplayName))
                 updatedFields.Add("ItemAttributes.promptName");
-            if (TrySetStringField(attr, typeof(ItemAttributes), "instanceName", "Huntsman Rifle"))
+            if (TrySetStringField(attr, typeof(ItemAttributes), "instanceName", DisplayName))
                 updatedFields.Add("ItemAttributes.instanceName");
 
-            attr.gameObject.name = "Huntsman Rifle";
+            attr.gameObject.name = DisplayName;
 
             var equippable = GetItemEquippable(attr, spawned);
             if (equippable != null)
@@ -725,12 +726,17 @@ namespace HuntsmanLoot
                     if (nameField != null)
                     {
                         foundFields.Add("Item.itemName");
-                        nameField.SetValue(custom, "Huntsman Rifle");
+                        nameField.SetValue(custom, DisplayName);
                         updatedFields.Add("Item.itemName");
                     }
 
-                    if (AccessTools.Field(typeof(Item), "itemNameLocalized") != null)
+                    var localizedField = AccessTools.Field(typeof(Item), "itemNameLocalized");
+                    if (localizedField != null)
+                    {
                         foundFields.Add("Item.itemNameLocalized");
+                        localizedField.SetValue(custom, null);
+                        updatedFields.Add("Item.itemNameLocalized");
+                    }
 
                     itemField.SetValue(attr, custom);
                 }
@@ -754,16 +760,104 @@ namespace HuntsmanLoot
             HuntsmanLootPlugin.DebugLog(
                 "[HuntsmanLoot] Inventory icon update: " +
                 (iconUpdated ? "success" : "fail"));
-            HuntsmanLootPlugin.DebugLog(
-                "[HuntsmanLoot] Inventory icon/name still uses native shotgun metadata — known limitation of native shotgun base.");
-            HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory name may remain SHOTGUN due to native shotgun metadata.");
         }
 
         static bool ApplyInventoryIconOverride(ItemAttributes attr, ItemEquippable equippable, ManualLogSource log)
         {
-            HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory icon override disabled — native shotgun icon kept temporarily.");
-            return false;
+            try
+            {
+                Sprite icon = CreateRuntimeInventoryIcon();
+                if (icon == null)
+                {
+                    log.LogInfo("[HuntsmanLoot] Inventory icon override unavailable; native shotgun icon kept.");
+                    return false;
+                }
 
+                attr.icon = icon;
+                var hasIconField = AccessTools.Field(typeof(ItemAttributes), "hasIcon");
+                hasIconField?.SetValue(attr, true);
+
+                if (equippable != null)
+                    equippable.ItemIcon = icon;
+
+                log.LogInfo("[HuntsmanLoot] Inventory icon override: success");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                HuntsmanLootPlugin.DebugWarning($"[HuntsmanLoot] Inventory icon override failed: {ex.Message}");
+                log.LogInfo("[HuntsmanLoot] Inventory icon override unavailable; native shotgun icon kept.");
+                return false;
+            }
+
+        }
+
+        static Sprite CreateRuntimeInventoryIcon()
+        {
+            const int width = 128;
+            const int height = 128;
+
+            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            texture.name = "Huntsman Rifle Inventory Icon";
+
+            var clear = new Color32(0, 0, 0, 0);
+            var pixels = new Color32[width * height];
+            for (int i = 0; i < pixels.Length; i++)
+                pixels[i] = clear;
+            texture.SetPixels32(pixels);
+
+            var barrel = new Color32(210, 188, 138, 255);
+            var metal = new Color32(62, 55, 48, 255);
+            var shadow = new Color32(18, 15, 12, 220);
+
+            DrawLine(texture, new Vector2(30f, 80f), new Vector2(105f, 35f), 6, barrel);
+            DrawLine(texture, new Vector2(31f, 84f), new Vector2(107f, 39f), 2, shadow);
+            DrawLine(texture, new Vector2(65f, 61f), new Vector2(76f, 54f), 10, metal);
+            DrawLine(texture, new Vector2(48f, 71f), new Vector2(61f, 63f), 8, metal);
+            DrawLine(texture, new Vector2(30f, 80f), new Vector2(18f, 95f), 8, metal);
+            DrawLine(texture, new Vector2(18f, 95f), new Vector2(25f, 106f), 7, metal);
+            DrawLine(texture, new Vector2(46f, 72f), new Vector2(49f, 92f), 3, metal);
+            DrawLine(texture, new Vector2(49f, 92f), new Vector2(61f, 81f), 3, metal);
+            DrawLine(texture, new Vector2(100f, 37f), new Vector2(112f, 30f), 4, metal);
+
+            texture.Apply(false, false);
+            return Sprite.Create(texture, new Rect(0f, 0f, width, height), new Vector2(0.5f, 0.5f), 128f);
+        }
+
+        static void DrawLine(Texture2D texture, Vector2 start, Vector2 end, int radius, Color32 color)
+        {
+            int steps = Mathf.CeilToInt(Vector2.Distance(start, end));
+            if (steps <= 0)
+            {
+                DrawCircle(texture, Mathf.RoundToInt(start.x), Mathf.RoundToInt(start.y), radius, color);
+                return;
+            }
+
+            for (int i = 0; i <= steps; i++)
+            {
+                float t = (float)i / steps;
+                var point = Vector2.Lerp(start, end, t);
+                DrawCircle(texture, Mathf.RoundToInt(point.x), Mathf.RoundToInt(point.y), radius, color);
+            }
+        }
+
+        static void DrawCircle(Texture2D texture, int cx, int cy, int radius, Color32 color)
+        {
+            int radiusSq = radius * radius;
+            for (int y = -radius; y <= radius; y++)
+            {
+                for (int x = -radius; x <= radius; x++)
+                {
+                    if (x * x + y * y > radiusSq) continue;
+
+                    int px = cx + x;
+                    int py = cy + y;
+                    if (px < 0 || py < 0 || px >= texture.width || py >= texture.height)
+                        continue;
+
+                    texture.SetPixel(px, py, color);
+                }
+            }
         }
 
         static void TryRecordField(Type type, string fieldName, List<string> fields)
