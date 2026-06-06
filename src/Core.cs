@@ -103,28 +103,28 @@ namespace HuntsmanLoot
 
             int current = (int)_numberOfBulletsField.GetValue(gun);
             var battery = spawned.GetComponentInChildren<ItemBattery>();
-            int maxAmmo = GetAmmoCapacity(current, battery);
+            int maxAmmo = Mathf.Max(1, GetAmmoCapacity(current, battery));
             int finalAmmo;
 
             if (RandomizeAmmo.Value)
             {
                 finalAmmo = RollWeightedAmmo(maxAmmo);
-                _numberOfBulletsField.SetValue(gun, finalAmmo);
                 DebugLog($"[HuntsmanLoot] Ammo randomized: current={current} max={maxAmmo} final={finalAmmo}");
             }
             else
             {
                 finalAmmo = maxAmmo;
-                _numberOfBulletsField.SetValue(gun, finalAmmo);
                 DebugLog($"[HuntsmanLoot] Ammo kept full: current={current} max={maxAmmo}");
             }
 
+            finalAmmo = Mathf.Clamp(finalAmmo, 1, maxAmmo);
+            _numberOfBulletsField.SetValue(gun, finalAmmo);
+
             if (battery != null)
             {
-                int bars = battery.batteryBars > 0 ? battery.batteryBars : maxAmmo;
-                int pct  = Mathf.Clamp((int)Math.Round((float)finalAmmo / bars * 100f), 0, 100);
+                int pct = Mathf.Clamp((int)Math.Round((float)finalAmmo / maxAmmo * 100f), 0, 100);
                 battery.SetBatteryLife(pct);
-                DebugLog($"[HuntsmanLoot] BatteryLife: {finalAmmo}/{bars} -> {pct}%");
+                DebugLog($"[HuntsmanLoot] BatteryLife: {finalAmmo}/{maxAmmo} -> {pct}%");
             }
 
             Log.LogInfo($"[HuntsmanLoot] Ammo final: {finalAmmo}/{maxAmmo}");
@@ -143,42 +143,49 @@ namespace HuntsmanLoot
 
         static int RollWeightedAmmo(int maxAmmo)
         {
+            int roll = UnityEngine.Random.Range(1, 101);
+            return RollWeightedAmmoFromRoll(maxAmmo, roll);
+        }
+
+        internal static int RollWeightedAmmoFromRoll(int maxAmmo, int roll)
+        {
             maxAmmo = Mathf.Max(1, maxAmmo);
             if (maxAmmo == 1) return 1;
 
-            int[] weights;
-            switch (maxAmmo)
-            {
-                case 2:
-                    weights = new[] { 75, 25 };
-                    break;
-                case 3:
-                    weights = new[] { 45, 40, 15 };
-                    break;
-                case 4:
-                    weights = new[] { 32, 30, 26, 12 };
-                    break;
-                case 5:
-                    weights = new[] { 25, 25, 22, 18, 10 };
-                    break;
-                case 6:
-                    weights = new[] { 22, 22, 20, 16, 10, 10 };
-                    break;
-                default:
-                    weights = BuildAmmoWeights(maxAmmo);
-                    break;
-            }
+            int[] weights = GetAmmoWeights(maxAmmo);
+            roll = Mathf.Clamp(roll, 1, 100);
 
-            int roll = UnityEngine.Random.Range(1, 101);
             int accumulated = 0;
             for (int i = 0; i < weights.Length; i++)
             {
                 accumulated += weights[i];
                 if (roll <= accumulated)
-                    return i + 1;
+                    return Mathf.Clamp(i + 1, 1, maxAmmo);
             }
 
             return maxAmmo;
+        }
+
+        internal static int[] GetAmmoWeights(int maxAmmo)
+        {
+            maxAmmo = Mathf.Max(1, maxAmmo);
+            switch (maxAmmo)
+            {
+                case 1:
+                    return new[] { 100 };
+                case 2:
+                    return new[] { 75, 25 };
+                case 3:
+                    return new[] { 45, 40, 15 };
+                case 4:
+                    return new[] { 32, 30, 26, 12 };
+                case 5:
+                    return new[] { 25, 25, 22, 18, 10 };
+                case 6:
+                    return new[] { 22, 22, 20, 16, 10, 10 };
+                default:
+                    return BuildAmmoWeights(maxAmmo);
+            }
         }
 
         static int[] BuildAmmoWeights(int maxAmmo)

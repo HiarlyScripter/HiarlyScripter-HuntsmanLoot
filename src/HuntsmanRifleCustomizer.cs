@@ -595,14 +595,14 @@ namespace HuntsmanLoot
             HuntsmanLootPlugin.DebugLog(
                 "[HuntsmanLoot] Inventory icon update: " +
                 (iconUpdated ? "success" : "fail"));
-            HuntsmanLootPlugin.DebugWarning(
+            HuntsmanLootPlugin.DebugLog(
                 "[HuntsmanLoot] Inventory icon/name still uses native shotgun metadata — known limitation of native shotgun base.");
-            log.LogInfo("[HuntsmanLoot] Inventory name may remain SHOTGUN due to native shotgun metadata.");
+            HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory name may remain SHOTGUN due to native shotgun metadata.");
         }
 
         static bool ApplyInventoryIconOverride(ItemAttributes attr, ItemEquippable equippable, ManualLogSource log)
         {
-            log.LogInfo("[HuntsmanLoot] Inventory icon override disabled — native shotgun icon kept temporarily.");
+            HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory icon override disabled — native shotgun icon kept temporarily.");
             return false;
 
         }
