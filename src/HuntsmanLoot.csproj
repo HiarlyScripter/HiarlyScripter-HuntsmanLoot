@@ -11,6 +11,9 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="HuntsmanRifleMeshData.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="BepInEx">
       <HintPath>C:\Users\Hiarly\AppData\Roaming\r2modmanPlus-local\REPO\profiles\Default\BepInEx\core\BepInEx.dll</HintPath>
       <Private>false</Private>

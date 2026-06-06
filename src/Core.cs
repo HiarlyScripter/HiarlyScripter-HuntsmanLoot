@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace HuntsmanLoot
 {
-    [BepInPlugin("com.hiarlyscripter.huntsmanloot", "Huntsman Loot", "1.1.2")]
+    [BepInPlugin("com.hiarlyscripter.huntsmanloot", "Huntsman Loot", "1.1.3")]
     public sealed class HuntsmanLootPlugin : BaseUnityPlugin
     {
         internal static HuntsmanLootPlugin Instance { get; private set; }
@@ -21,6 +21,7 @@ namespace HuntsmanLoot
         internal static ConfigEntry<bool> BerserkerOnly;
         internal static ConfigEntry<bool> MasterClientOnly;
         internal static ConfigEntry<bool> RandomizeAmmo;
+        internal static ConfigEntry<bool> EnableDebugLogging;
 
         // ── Reflexao: campos internos do jogo ─────────────────────────────────
         internal static readonly FieldInfo _hasHealthField       = AccessTools.Field(typeof(Enemy),       "HasHealth");
@@ -55,19 +56,38 @@ namespace HuntsmanLoot
                 "true  = arma cai com municao aleatoria (entre 1 e o maximo).\n" +
                 "false = sempre cai com municao completa.");
 
+            EnableDebugLogging = Config.Bind(
+                "Debug", "EnableDebugLogging", false,
+                "true  = logs tecnicos detalhados para diagnostico.\n" +
+                "false = logs normais reduzidos.");
+
             LogReflectionStatus();
 
             new Harmony("com.hiarlyscripter.huntsmanloot").PatchAll(typeof(HuntsmanPatches));
-            Log.LogInfo("[HuntsmanLoot] v1.1.2 carregado. Patch Harmony aplicado.");
+            Log.LogInfo("[HuntsmanLoot] v1.1.3 carregado. Patch Harmony aplicado.");
+        }
+
+        internal static bool DebugLoggingEnabled => EnableDebugLogging != null && EnableDebugLogging.Value;
+
+        internal static void DebugLog(string message)
+        {
+            if (DebugLoggingEnabled)
+                Log?.LogInfo(message);
+        }
+
+        internal static void DebugWarning(string message)
+        {
+            if (DebugLoggingEnabled)
+                Log?.LogWarning(message);
         }
 
         private void LogReflectionStatus()
         {
-            Log.LogInfo($"[HuntsmanLoot] Reflexao: " +
-                        $"HasHealth={_hasHealthField != null}, " +
-                        $"Health={_healthField != null}, " +
-                        $"healthCurrent={_hpCurrentField != null}, " +
-                        $"numberOfBullets={_numberOfBulletsField != null}");
+            DebugLog($"[HuntsmanLoot] Reflexao: " +
+                     $"HasHealth={_hasHealthField != null}, " +
+                     $"Health={_healthField != null}, " +
+                     $"healthCurrent={_hpCurrentField != null}, " +
+                     $"numberOfBullets={_numberOfBulletsField != null}");
 
             if (_hasHealthField == null || _healthField == null || _hpCurrentField == null)
                 Log.LogError("[HuntsmanLoot] ATENCAO: campos de saude nao encontrados — deteccao de morte pode falhar!");
@@ -82,34 +102,99 @@ namespace HuntsmanLoot
             if (gun == null || _numberOfBulletsField == null) return;
 
             int current = (int)_numberOfBulletsField.GetValue(gun);
+            var battery = spawned.GetComponentInChildren<ItemBattery>();
+            int maxAmmo = GetAmmoCapacity(current, battery);
             int finalAmmo;
 
-            if (current <= 0)
+            if (RandomizeAmmo.Value)
             {
-                finalAmmo = RandomizeAmmo.Value ? UnityEngine.Random.Range(1, 5) : 4;
+                finalAmmo = RollWeightedAmmo(maxAmmo);
                 _numberOfBulletsField.SetValue(gun, finalAmmo);
-                Log.LogInfo($"[HuntsmanLoot] Ammo zerada → forcada para {finalAmmo}");
-            }
-            else if (RandomizeAmmo.Value && current > 1)
-            {
-                finalAmmo = UnityEngine.Random.Range(1, current + 1);
-                _numberOfBulletsField.SetValue(gun, finalAmmo);
-                Log.LogInfo($"[HuntsmanLoot] Ammo randomizada: {current} → {finalAmmo}");
+                DebugLog($"[HuntsmanLoot] Ammo randomized: current={current} max={maxAmmo} final={finalAmmo}");
             }
             else
             {
-                finalAmmo = current;
-                Log.LogInfo($"[HuntsmanLoot] Ammo mantida: {finalAmmo}");
+                finalAmmo = maxAmmo;
+                _numberOfBulletsField.SetValue(gun, finalAmmo);
+                DebugLog($"[HuntsmanLoot] Ammo kept full: current={current} max={maxAmmo}");
             }
 
-            var battery = spawned.GetComponentInChildren<ItemBattery>();
             if (battery != null)
             {
-                int bars = battery.batteryBars > 0 ? battery.batteryBars : 4;
+                int bars = battery.batteryBars > 0 ? battery.batteryBars : maxAmmo;
                 int pct  = Mathf.Clamp((int)Math.Round((float)finalAmmo / bars * 100f), 0, 100);
                 battery.SetBatteryLife(pct);
-                Log.LogInfo($"[HuntsmanLoot] BatteryLife: {finalAmmo}/{bars} → {pct}%");
+                DebugLog($"[HuntsmanLoot] BatteryLife: {finalAmmo}/{bars} -> {pct}%");
             }
+
+            Log.LogInfo($"[HuntsmanLoot] Ammo final: {finalAmmo}/{maxAmmo}");
+        }
+
+        static int GetAmmoCapacity(int current, ItemBattery battery)
+        {
+            if (battery != null && battery.batteryBars > 0)
+                return battery.batteryBars;
+
+            if (current > 0)
+                return current;
+
+            return 4;
+        }
+
+        static int RollWeightedAmmo(int maxAmmo)
+        {
+            maxAmmo = Mathf.Max(1, maxAmmo);
+            if (maxAmmo == 1) return 1;
+
+            int[] weights;
+            switch (maxAmmo)
+            {
+                case 2:
+                    weights = new[] { 75, 25 };
+                    break;
+                case 3:
+                    weights = new[] { 45, 40, 15 };
+                    break;
+                case 4:
+                    weights = new[] { 32, 30, 26, 12 };
+                    break;
+                case 5:
+                    weights = new[] { 25, 25, 22, 18, 10 };
+                    break;
+                case 6:
+                    weights = new[] { 22, 22, 20, 16, 10, 10 };
+                    break;
+                default:
+                    weights = BuildAmmoWeights(maxAmmo);
+                    break;
+            }
+
+            int roll = UnityEngine.Random.Range(1, 101);
+            int accumulated = 0;
+            for (int i = 0; i < weights.Length; i++)
+            {
+                accumulated += weights[i];
+                if (roll <= accumulated)
+                    return i + 1;
+            }
+
+            return maxAmmo;
+        }
+
+        static int[] BuildAmmoWeights(int maxAmmo)
+        {
+            var weights = new int[maxAmmo];
+            weights[maxAmmo - 1] = 10;
+
+            int remaining = 90;
+            int nonFullSlots = maxAmmo - 1;
+            int baseWeight = remaining / nonFullSlots;
+            int remainder = remaining - (baseWeight * nonFullSlots);
+
+            for (int i = 0; i < nonFullSlots; i++)
+                weights[i] = baseWeight + (i < remainder ? 1 : 0);
+
+            return weights;
         }
     }
 
@@ -121,302 +206,9 @@ namespace HuntsmanLoot
     {
         private const string SHOTGUN_PATH = "Items/Item Gun Shotgun";
 
-        // Visual clonado antes do Despawn — consumido em DropRifle
-        private static GameObject _pendingWeaponVisual;
-
-        private static readonly string[] StrongBodyKeywords =
-        {
-            "body", "torso", "skin", "head", "neck", "chest", "spine", "pelvis",
-            "hip", "leg", "foot", "thigh", "calf", "knee", "face", "eye", "jaw",
-            "mouth", "teeth", "hair"
-        };
-
-        private static readonly string[] WeakBodyKeywords =
-        {
-            "arm", "hand", "finger", "thumb", "wrist", "elbow", "shoulder",
-            "clavicle"
-        };
-
-        // ── 0. PRE-DESPAWN: captura visual da arma ANTES de o inimigo ser desativado ──
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EnemyParent), "Despawn")]
-        static void OnHuntsmanDespawnPre(EnemyParent __instance)
-        {
-            if (__instance.enemyName != "Huntsman") return;
-            if (HuntsmanLootPlugin._enemyParentField == null) return;
-
-            // Verificar se e morte (HP = 0)
-            var enemy = (Enemy)HuntsmanLootPlugin._enemyParentField.GetValue(__instance);
-            if (enemy == null) return;
-            if (HuntsmanLootPlugin._healthField == null || HuntsmanLootPlugin._hpCurrentField == null) return;
-            var health = (EnemyHealth)HuntsmanLootPlugin._healthField.GetValue(enemy);
-            if (health == null) return;
-            int hp = (int)HuntsmanLootPlugin._hpCurrentField.GetValue(health);
-            if (hp > 0) return; // despawn normal, nao morte
-
-            // Limpar pendente anterior (seguranca)
-            ClearPendingVisual();
-
-            // Buscar visual da arma na hierarquia do Huntsman
-            var weaponGo = FindWeaponVisual(__instance.transform);
-            if (weaponGo != null)
-            {
-                // Clonar AGORA, antes do Despawn destruir/desativar o inimigo
-                var clone = UnityEngine.Object.Instantiate(weaponGo);
-                clone.name = "HuntsmanWeaponVisual_Pending";
-                clone.SetActive(false);
-                UnityEngine.Object.DontDestroyOnLoad(clone);
-                _pendingWeaponVisual = clone;
-                HuntsmanLootPlugin.Log.LogInfo(
-                    $"[HuntsmanLoot] Cached Huntsman weapon visual: {GetTransformPath(weaponGo.transform)}");
-            }
-            else
-            {
-                HuntsmanLootPlugin.Log.LogWarning(
-                    "[HuntsmanLoot] Huntsman weapon visual not found — keeping native shotgun visible.");
-            }
-        }
-
-        // ── Seletor por score: percorre TODA a hierarquia sem pular subarvores ──
-        // Arm/hand penalizam o NO como candidato mas os FILHOS sao sempre explorados.
-        // So pode vencer um no com sinal de arma, mesh renderizavel e score > 0.
-        static GameObject FindWeaponVisual(Transform root)
-        {
-            WeaponVisualCandidate bestCandidate = null;
-
-            var queue = new Queue<Transform>();
-            queue.Enqueue(root);
-
-            while (queue.Count > 0)
-            {
-                var t = queue.Dequeue();
-                var candidate = EvaluateWeaponCandidate(t, root);
-                LogWeaponCandidate(candidate);
-
-                if (candidate.Accepted && IsBetterWeaponCandidate(candidate, bestCandidate))
-                    bestCandidate = candidate;
-
-                // Sempre descer nos filhos — NUNCA pular subarvore
-                for (int i = 0; i < t.childCount; i++)
-                    queue.Enqueue(t.GetChild(i));
-            }
-
-            if (bestCandidate != null)
-                HuntsmanLootPlugin.Log.LogInfo(
-                    $"[HuntsmanLoot] Selected Huntsman weapon visual:" +
-                    $" {bestCandidate.Path} (score={bestCandidate.Score})");
-            else
-                HuntsmanLootPlugin.Log.LogInfo("[HuntsmanLoot] No valid Huntsman weapon visual found");
-
-            return bestCandidate?.Transform.gameObject;
-        }
-
-        static WeaponVisualCandidate EvaluateWeaponCandidate(Transform t, Transform root)
-        {
-            string name = t.name.ToLowerInvariant();
-            string path = GetTransformPath(t);
-            string pathLower = path.ToLowerInvariant();
-
-            var stats = GetVisualStats(t);
-            int score = 0;
-
-            bool directWeaponSignal = AddWeaponScore(name, true, ref score);
-            bool pathWeaponSignal = AddWeaponScore(pathLower, false, ref score);
-            bool hasWeaponSignal = directWeaponSignal || pathWeaponSignal;
-
-            bool strongBody = ContainsAny(name, StrongBodyKeywords);
-            bool weakBody = ContainsAny(name, WeakBodyKeywords);
-
-            if (strongBody) score -= 45;
-            if (weakBody) score -= 18;
-
-            if (stats.RenderableMeshCount > 0) score += 8;
-            if (stats.RenderableMeshCount > 1) score += 4;
-            if (stats.RendererCount > 3) score -= 4;
-
-            bool accepted = false;
-            string reason;
-
-            if (t == root)
-                reason = "root-not-weapon";
-            else if (!stats.HasValidVisual)
-                reason = "no-valid-mesh-or-renderer";
-            else if (!hasWeaponSignal)
-                reason = "no-weapon-signal";
-            else if (strongBody && !directWeaponSignal)
-                reason = "body-part";
-            else if (score <= 0)
-                reason = "score<=0";
-            else
-            {
-                accepted = true;
-                reason = "ok";
-            }
-
-            return new WeaponVisualCandidate
-            {
-                Transform = t,
-                Path = path,
-                Score = score,
-                RendererCount = stats.RendererCount,
-                MeshCount = stats.MeshCount,
-                Accepted = accepted,
-                Reason = reason,
-                DirectWeaponSignal = directWeaponSignal,
-                Depth = GetDepth(t, root)
-            };
-        }
-
-        static bool AddWeaponScore(string text, bool directName, ref int score)
-        {
-            if (text.Contains("shotgun"))
-            {
-                score += directName ? 34 : 11;
-                return true;
-            }
-
-            if (text.Contains("gun") || text.Contains("rifle") ||
-                text.Contains("weapon") || text.Contains("firearm"))
-            {
-                score += directName ? 30 : 10;
-                return true;
-            }
-
-            if (text.Contains("barrel") || text.Contains("stock") ||
-                text.Contains("trigger") || text.Contains("pump") ||
-                text.Contains("receiver") || text.Contains("magazine"))
-            {
-                score += directName ? 14 : 5;
-                return true;
-            }
-
-            if (text.Contains("muzzle") || text.Contains("sight") ||
-                text.Contains("scope") || text.Contains("ammo") ||
-                text.Contains("cannon"))
-            {
-                score += directName ? 10 : 3;
-                return true;
-            }
-
-            return false;
-        }
-
-        static VisualStats GetVisualStats(Transform t)
-        {
-            var stats = new VisualStats();
-
-            foreach (var mr in t.GetComponentsInChildren<MeshRenderer>(true))
-            {
-                stats.RendererCount++;
-                var mf = mr.GetComponent<MeshFilter>();
-                if (mf != null && mf.sharedMesh != null)
-                    stats.RenderableMeshCount++;
-            }
-
-            foreach (var smr in t.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-            {
-                stats.RendererCount++;
-                if (smr.sharedMesh != null)
-                {
-                    stats.MeshCount++;
-                    stats.RenderableMeshCount++;
-                }
-            }
-
-            foreach (var mf in t.GetComponentsInChildren<MeshFilter>(true))
-            {
-                if (mf.sharedMesh != null)
-                    stats.MeshCount++;
-            }
-
-            return stats;
-        }
-
-        static void LogWeaponCandidate(WeaponVisualCandidate candidate)
-        {
-            if (candidate.RendererCount == 0 &&
-                candidate.MeshCount == 0 &&
-                candidate.Score <= 0 &&
-                !candidate.DirectWeaponSignal)
-                return;
-
-            string status = candidate.Accepted ? "accepted" : "rejected";
-            HuntsmanLootPlugin.Log.LogInfo(
-                $"[HuntsmanLoot] Candidate: path={candidate.Path}" +
-                $" score={candidate.Score} renderers={candidate.RendererCount}" +
-                $" meshes={candidate.MeshCount} {status} reason={candidate.Reason}");
-        }
-
-        static bool IsBetterWeaponCandidate(
-            WeaponVisualCandidate candidate,
-            WeaponVisualCandidate bestCandidate)
-        {
-            if (bestCandidate == null) return true;
-            if (candidate.Score != bestCandidate.Score)
-                return candidate.Score > bestCandidate.Score;
-            if (candidate.DirectWeaponSignal != bestCandidate.DirectWeaponSignal)
-                return candidate.DirectWeaponSignal;
-            if (candidate.RendererCount != bestCandidate.RendererCount)
-                return candidate.RendererCount > bestCandidate.RendererCount;
-            return candidate.Depth > bestCandidate.Depth;
-        }
-
-        static bool ContainsAny(string text, string[] keywords)
-        {
-            foreach (var keyword in keywords)
-                if (text.Contains(keyword))
-                    return true;
-            return false;
-        }
-
-        static int GetDepth(Transform t, Transform root)
-        {
-            int depth = 0;
-            var cur = t;
-            while (cur != null && cur != root)
-            {
-                depth++;
-                cur = cur.parent;
-            }
-            return depth;
-        }
-
-        private sealed class WeaponVisualCandidate
-        {
-            internal Transform Transform;
-            internal string Path;
-            internal int Score;
-            internal int RendererCount;
-            internal int MeshCount;
-            internal bool Accepted;
-            internal string Reason;
-            internal bool DirectWeaponSignal;
-            internal int Depth;
-        }
-
-        private struct VisualStats
-        {
-            internal int RendererCount;
-            internal int MeshCount;
-            internal int RenderableMeshCount;
-            internal bool HasValidVisual => RenderableMeshCount > 0;
-        }
-
-        static string GetTransformPath(Transform t)
-        {
-            var parts = new List<string>();
-            var cur = t;
-            while (cur != null) { parts.Insert(0, cur.name); cur = cur.parent; }
-            return string.Join("/", parts);
-        }
-
+        // Runtime capture encerrado. A rota atual usa Mesh/Material nativos do jogo.
         static void ClearPendingVisual()
         {
-            if (_pendingWeaponVisual != null)
-            {
-                UnityEngine.Object.Destroy(_pendingWeaponVisual);
-                _pendingWeaponVisual = null;
-            }
         }
 
         // ── 1. POST-DESPAWN: detecta morte e dropa a arma ─────────────────────
@@ -426,12 +218,12 @@ namespace HuntsmanLoot
         {
             if (__instance.enemyName != "Huntsman") return;
 
-            HuntsmanLootPlugin.Log.LogInfo("[HuntsmanLoot] Huntsman detectado no Despawn.");
+            HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Huntsman detectado no Despawn.");
 
             if (HuntsmanLootPlugin.MasterClientOnly.Value && !SemiFunc.IsMasterClientOrSingleplayer())
             {
                 ClearPendingVisual();
-                HuntsmanLootPlugin.Log.LogInfo("[HuntsmanLoot] Nao eh master client — drop ignorado.");
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Nao eh master client — drop ignorado.");
                 return;
             }
 
@@ -462,7 +254,7 @@ namespace HuntsmanLoot
             bool hasHealth = (bool)HuntsmanLootPlugin._hasHealthField.GetValue(enemy);
             if (!hasHealth)
             {
-                HuntsmanLootPlugin.Log.LogInfo("[HuntsmanLoot] Enemy sem health component — ignorando.");
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Enemy sem health component — ignorando.");
                 return;
             }
 
@@ -475,12 +267,12 @@ namespace HuntsmanLoot
             }
 
             int hp = (int)HuntsmanLootPlugin._hpCurrentField.GetValue(health);
-            HuntsmanLootPlugin.Log.LogInfo($"[HuntsmanLoot] HP ao despawnar: {hp}");
+            HuntsmanLootPlugin.DebugLog($"[HuntsmanLoot] HP ao despawnar: {hp}");
 
             if (hp > 0)
             {
                 // Prefix nao teria setado _pendingWeaponVisual para hp>0, mas limpar por seguranca
-                HuntsmanLootPlugin.Log.LogInfo("[HuntsmanLoot] HP > 0 — despawn normal. Sem drop.");
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] HP > 0 — despawn normal. Sem drop.");
                 return;
             }
 
@@ -488,7 +280,7 @@ namespace HuntsmanLoot
             if (roll > HuntsmanLootPlugin.DropChance.Value)
             {
                 ClearPendingVisual();
-                HuntsmanLootPlugin.Log.LogInfo(
+                HuntsmanLootPlugin.DebugLog(
                     $"[HuntsmanLoot] Chance falhou (roll={roll} > {HuntsmanLootPlugin.DropChance.Value}%) — sem drop.");
                 return;
             }
@@ -558,7 +350,7 @@ namespace HuntsmanLoot
                     return;
                 }
                 spawned = UnityEngine.Object.Instantiate(prefab, pos, Quaternion.identity);
-                HuntsmanLootPlugin.Log.LogInfo("[HuntsmanLoot] Arma spawnada (singleplayer).");
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Arma spawnada (singleplayer).");
             }
             else
             {
@@ -581,19 +373,18 @@ namespace HuntsmanLoot
                     HuntsmanLootPlugin.Log.LogError("[HuntsmanLoot] InstantiateRoomObject retornou null.");
                     return;
                 }
-                HuntsmanLootPlugin.Log.LogInfo("[HuntsmanLoot] Arma spawnada (multiplayer).");
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Arma spawnada (multiplayer).");
             }
 
-            // ── Consumir visual pendente ──────────────────────────────────────
-            var pendingVisual = _pendingWeaponVisual;
-            _pendingWeaponVisual = null;
+            // Runtime capture/hierarquia encerrado: visual agora usa Mesh/Material nativos do jogo.
+            ClearPendingVisual();
 
             // ── Customizacao visual ───────────────────────────────────────────
-            HuntsmanLootPlugin.Log.LogInfo("[HuntsmanLoot] Customizer START");
+            HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Customizer START");
             try
             {
-                HuntsmanRifleCustomizer.Apply(spawned, pendingVisual, HuntsmanLootPlugin.Log);
-                HuntsmanLootPlugin.Log.LogInfo("[HuntsmanLoot] Customizer DONE");
+                HuntsmanRifleCustomizer.Apply(spawned, ((Component)enemy).gameObject, HuntsmanLootPlugin.Log);
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Customizer DONE");
             }
             catch (Exception exVis)
             {

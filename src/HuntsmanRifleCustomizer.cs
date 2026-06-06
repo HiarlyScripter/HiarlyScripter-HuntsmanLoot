@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -9,52 +10,100 @@ using Object = UnityEngine.Object;
 namespace HuntsmanLoot
 {
     // Aplicado sobre a shotgun nativa JA spawnada.
-    // Oculta renderers originais e anexa o visual real da arma do Huntsman.
+    // Oculta renderers originais e anexa Mesh/Material nativos da arma do Huntsman.
     // Nao toca em PhysGrabObject, RoomVolumeCheck, Rigidbody, ItemGun, PhotonView.
     internal static class HuntsmanRifleCustomizer
     {
         private static readonly string[] _preserveKeywords =
             { "battery", "ammo", "bar", "ui", "icon", "screen", "text" };
 
-        internal static void Apply(GameObject spawned, GameObject weaponVisual, ManualLogSource log)
+        private static readonly Vector3 NativeGunLocalPosition = new Vector3(0f, 0f, 0f);
+        private static readonly Vector3 NativeGunLocalEuler    = new Vector3(-8f, 180f, 90f);
+        private static readonly Vector3 NativeGunLocalScale    = new Vector3(0.75f, 0.75f, 0.75f);
+
+        internal static void Apply(GameObject spawned, GameObject sourceEnemy, ManualLogSource log)
         {
             if (spawned == null) return;
 
-            if (weaponVisual == null)
-            {
-                // Sem visual valido: manter shotgun intacta e nao mascarar com visual fake.
-                log.LogWarning("[HuntsmanLoot] Huntsman weapon visual not found — keeping native shotgun visible.");
-                log.LogInfo("[HuntsmanLoot] Original shotgun renderers hidden: 0");
-                log.LogInfo("[HuntsmanLoot] Huntsman weapon visual attached: fail");
-
-                try { ApplyIdentity(spawned, log); }
-                catch (Exception ex) { log.LogError($"[HuntsmanLoot] Customizer/Identity: {ex.Message}"); }
-
-                return;
-            }
-
-            // Com visual valido: anexar visual real; so entao ocultar a shotgun base.
-            bool attached = false;
-            try { attached = AttachWeaponVisual(spawned, weaponVisual, log); }
+            NativeHunterGunVisualResolver.VisualAttachResult attachResult = null;
+            try { attachResult = AttachNativeWeaponVisual(spawned, sourceEnemy, log); }
             catch (Exception ex)
             {
-                log.LogError($"[HuntsmanLoot] Customizer/Attach: {ex.Message}");
-                log.LogInfo("[HuntsmanLoot] Huntsman weapon visual attached: fail");
+                log.LogError($"[HuntsmanLoot] Customizer/NativeMesh: {ex.Message}");
+                log.LogInfo("[HuntsmanLoot] Native Hunter Gun visual created: FAIL reason=exception");
+                attachResult = NativeHunterGunVisualResolver.VisualAttachResult.Fail("exception");
             }
 
-            if (!attached)
+            if (attachResult == null || !attachResult.Pass)
             {
-                log.LogInfo("[HuntsmanLoot] Original shotgun renderers hidden: 0");
-                DestroyDetachedVisual(weaponVisual);
+                if (attachResult == null || attachResult.Reason == "mesh-not-found")
+                    log.LogWarning("[HuntsmanLoot] Native Hunter Gun mesh not found — keeping native shotgun visible");
+                else
+                    log.LogWarning($"[HuntsmanLoot] Keeping native shotgun visible because native visual failed: {attachResult.Reason}");
+
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Original shotgun renderers hidden: 0");
             }
             else
             {
-                try { HideOriginalRenderers(spawned, log); }
+                try { HideOriginalRenderers(spawned, attachResult.Root, log); }
                 catch (Exception ex) { log.LogError($"[HuntsmanLoot] Customizer/Hide: {ex.Message}"); }
             }
 
             try { ApplyIdentity(spawned, log); }
             catch (Exception ex) { log.LogError($"[HuntsmanLoot] Customizer/Identity: {ex.Message}"); }
+        }
+
+        static NativeHunterGunVisualResolver.VisualAttachResult AttachNativeWeaponVisual(
+            GameObject spawned,
+            GameObject sourceEnemy,
+            ManualLogSource log)
+        {
+            var resolved = NativeHunterGunVisualResolver.Resolve(sourceEnemy, log);
+            if (resolved.Mesh == null)
+            {
+                log.LogInfo("[HuntsmanLoot] Native Hunter Gun visual created: FAIL reason=mesh-not-found");
+                return NativeHunterGunVisualResolver.VisualAttachResult.Fail("mesh-not-found");
+            }
+
+            var materials = NativeHunterGunVisualResolver.CreateNativeCloneMaterials(resolved.Mesh, log);
+            if (!HasAnyMaterial(materials))
+            {
+                log.LogInfo("[HuntsmanLoot] Native Hunter Gun visual created: FAIL reason=material-not-found");
+                return NativeHunterGunVisualResolver.VisualAttachResult.Fail("material-not-found");
+            }
+
+            var root = new GameObject("HuntsmanNativeGunVisualRoot");
+            root.transform.SetParent(spawned.transform, false);
+            root.transform.localPosition = NativeGunLocalPosition;
+            root.transform.localRotation = Quaternion.Euler(NativeGunLocalEuler.x, NativeGunLocalEuler.y, NativeGunLocalEuler.z);
+            root.transform.localScale = NativeGunLocalScale;
+
+            var meshFilter = root.AddComponent<MeshFilter>();
+            var meshRenderer = root.AddComponent<MeshRenderer>();
+
+            meshFilter.sharedMesh = resolved.Mesh;
+            meshRenderer.sharedMaterials = materials;
+            meshRenderer.enabled = true;
+            root.SetActive(true);
+
+            log.LogInfo(
+                "[HuntsmanLoot] Native visual transform: " +
+                $"pos={FormatVector(root.transform.localPosition)} " +
+                $"euler={FormatVector(NativeGunLocalEuler)} " +
+                $"scale={FormatVector(root.transform.localScale)}");
+
+            var validation = HasRenderableVisual(root);
+            log.LogInfo(
+                $"[HuntsmanLoot] Native Hunter Gun visual created: " +
+                $"{(validation.Pass ? "PASS" : "FAIL")} reason={validation.Reason}");
+
+            if (!validation.Pass)
+            {
+                Object.Destroy(root);
+                return NativeHunterGunVisualResolver.VisualAttachResult.Fail(validation.Reason);
+            }
+
+            return NativeHunterGunVisualResolver.VisualAttachResult.Success(root);
         }
 
         // Verifica se o GameObject (ou qualquer filho) tem mesh renderizavel real.
@@ -77,23 +126,29 @@ namespace HuntsmanLoot
         // NAO destroi GameObjects, NAO remove componentes funcionais.
         // Preserva qualquer renderer cujo caminho contenha palavras-chave de UI/barra.
 
-        static void HideOriginalRenderers(GameObject spawned, ManualLogSource log)
+        static void HideOriginalRenderers(GameObject spawned, GameObject protectedVisualRoot, ManualLogSource log)
         {
             int hidden = 0, preserved = 0;
 
             foreach (var mr in spawned.GetComponentsInChildren<MeshRenderer>(true))
             {
-                if (ShouldPreserve(mr.transform)) { preserved++; }
+                if (IsProtectedVisual(mr.transform, protectedVisualRoot) || ShouldPreserve(mr.transform)) { preserved++; }
                 else { mr.enabled = false; hidden++; }
             }
 
             foreach (var smr in spawned.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
-                if (ShouldPreserve(smr.transform)) { preserved++; }
+                if (IsProtectedVisual(smr.transform, protectedVisualRoot) || ShouldPreserve(smr.transform)) { preserved++; }
                 else { smr.enabled = false; hidden++; }
             }
 
-            log.LogInfo($"[HuntsmanLoot] Original shotgun renderers hidden: {hidden} | Preserved: {preserved}");
+            HuntsmanLootPlugin.DebugLog($"[HuntsmanLoot] Original shotgun renderers hidden: {hidden}");
+            HuntsmanLootPlugin.DebugLog($"[HuntsmanLoot] Original shotgun renderers preserved: {preserved}");
+        }
+
+        static bool IsProtectedVisual(Transform t, GameObject protectedVisualRoot)
+        {
+            return protectedVisualRoot != null && t != null && t.IsChildOf(protectedVisualRoot.transform);
         }
 
         static bool ShouldPreserve(Transform t)
@@ -107,92 +162,6 @@ namespace HuntsmanLoot
                 cur = cur.parent;
             }
             return false;
-        }
-
-        // ── Anexar visual real da arma do Huntsman ─────────────────────────────
-
-        static bool AttachWeaponVisual(GameObject spawned, GameObject weaponVisual, ManualLogSource log)
-        {
-            if (spawned == null || weaponVisual == null)
-            {
-                log.LogInfo("[HuntsmanLoot] Huntsman weapon visual attached: fail");
-                return false;
-            }
-
-            // Root visual ancorado no item dropado
-            var root = new GameObject("HuntsmanGunVisualRoot");
-            root.transform.SetParent(spawned.transform, false);
-            root.transform.localPosition = Vector3.zero;
-            root.transform.localRotation = Quaternion.identity;
-            root.transform.localScale    = Vector3.one;
-
-            // Parentear ao root com transform limpo antes de validar renderizacao.
-            weaponVisual.transform.SetParent(root.transform, false);
-            weaponVisual.transform.localPosition = Vector3.zero;
-            weaponVisual.transform.localRotation = Quaternion.identity;
-            weaponVisual.transform.localScale    = Vector3.one;
-            weaponVisual.SetActive(true);
-
-            var before = CountVisualRenderers(weaponVisual);
-            log.LogInfo(
-                $"[HuntsmanLoot] Visual clone renderers before cleanup: MR={before.MeshRenderers} " +
-                $"SMR={before.SkinnedMeshRenderers} MF={before.MeshFilters}");
-
-            StripNonVisualComponents(weaponVisual, log);
-            PrepareVisualRenderers(weaponVisual);
-
-            var after = CountVisualRenderers(weaponVisual);
-            log.LogInfo(
-                $"[HuntsmanLoot] Visual clone renderers after cleanup: MR={after.MeshRenderers} " +
-                $"SMR={after.SkinnedMeshRenderers} MF={after.MeshFilters}");
-
-            var validation = HasRenderableVisual(weaponVisual);
-            if (!validation.Pass && after.SkinnedMeshRenderers > 0)
-            {
-                int baked = BakeSkinnedMeshRenderers(weaponVisual, log);
-                if (baked > 0)
-                {
-                    PrepareVisualRenderers(weaponVisual);
-                    validation = HasRenderableVisual(weaponVisual);
-                }
-            }
-
-            log.LogInfo(
-                $"[HuntsmanLoot] Visual clone validation: " +
-                $"{(validation.Pass ? "PASS" : "FAIL")} reason={validation.Reason}");
-
-            if (!validation.Pass)
-            {
-                Object.Destroy(root);
-                log.LogWarning("[HuntsmanLoot] Keeping native shotgun visible because visual clone is invalid");
-                log.LogInfo("[HuntsmanLoot] Huntsman weapon visual attached: fail");
-                return false;
-            }
-
-            log.LogInfo("[HuntsmanLoot] Huntsman weapon visual attached: success");
-            return true;
-        }
-
-        static VisualRendererCounts CountVisualRenderers(GameObject root)
-        {
-            return new VisualRendererCounts
-            {
-                MeshRenderers = root.GetComponentsInChildren<MeshRenderer>(true).Length,
-                SkinnedMeshRenderers = root.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length,
-                MeshFilters = root.GetComponentsInChildren<MeshFilter>(true).Length
-            };
-        }
-
-        static void PrepareVisualRenderers(GameObject root)
-        {
-            foreach (var tr in root.GetComponentsInChildren<Transform>(true))
-                tr.gameObject.SetActive(true);
-
-            foreach (var mr in root.GetComponentsInChildren<MeshRenderer>(true))
-                mr.enabled = true;
-
-            foreach (var smr in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-                smr.enabled = true;
         }
 
         static VisualValidationResult HasRenderableVisual(GameObject root)
@@ -234,123 +203,313 @@ namespace HuntsmanLoot
             return false;
         }
 
-        static int BakeSkinnedMeshRenderers(GameObject root, ManualLogSource log)
+        static string FormatVector(Vector3 value)
         {
-            int bakedCount = 0;
-            var skinnedRenderers = root.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            return "(" +
+                   value.x.ToString("0.###", CultureInfo.InvariantCulture) + "," +
+                   value.y.ToString("0.###", CultureInfo.InvariantCulture) + "," +
+                   value.z.ToString("0.###", CultureInfo.InvariantCulture) + ")";
+        }
 
-            foreach (var smr in skinnedRenderers)
+        static string FormatQuaternion(Quaternion value)
+        {
+            return $"({value.x:0.###},{value.y:0.###},{value.z:0.###},{value.w:0.###})";
+        }
+
+        private static class NativeHunterGunVisualResolver
+        {
+            private const string NativeMeshName = "Hunter Gun";
+            private const string NativeMaterialName = "Enemy Hunter";
+
+            internal static ResolveResult Resolve(GameObject sourceEnemy, ManualLogSource log)
             {
-                if (smr == null || smr.sharedMesh == null || !HasAnyMaterial(smr.sharedMaterials))
-                    continue;
+                var result = new ResolveResult();
+                TryResolveFromGameObject(sourceEnemy, result);
 
-                try
+                if (result.Mesh == null)
+                    result.Mesh = FindNativeMesh();
+
+                if (result.Mesh == null)
+                    return result;
+
+                log.LogInfo(
+                    $"[HuntsmanLoot] Native Hunter Gun mesh found: name={result.Mesh.name} vertices={result.Mesh.vertexCount}");
+
+                return result;
+            }
+
+            internal static Material[] CreateNativeCloneMaterials(Mesh mesh, ManualLogSource log)
+            {
+                var nativeMaterials = FindNativeMaterials();
+                if (HasAnyMaterial(nativeMaterials))
                 {
-                    var bakedMesh = new Mesh();
-                    smr.BakeMesh(bakedMesh);
+                    var cloned = CloneMaterialsForMesh(mesh, nativeMaterials);
+                    NeutralizeProblematicTint(cloned);
+                    log.LogInfo("[HuntsmanLoot] Visual material mode: native-clone");
+                    return cloned;
+                }
 
-                    if (bakedMesh.vertexCount <= 0)
+                log.LogWarning("[HuntsmanLoot] Native material unavailable — using fallback-neutral.");
+                var fallback = CreateFallbackNeutralMaterials(mesh, log);
+                log.LogInfo("[HuntsmanLoot] Visual material mode: fallback-neutral");
+                return fallback;
+            }
+
+            static Material[] CloneMaterialsForMesh(Mesh mesh, Material[] nativeMaterials)
+            {
+                int count = Mathf.Max(1, mesh != null ? mesh.subMeshCount : 1);
+                var materials = new Material[count];
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    Material source = nativeMaterials[Mathf.Min(i, nativeMaterials.Length - 1)];
+                    materials[i] = new Material(source)
                     {
-                        Object.Destroy(bakedMesh);
+                        name = $"HuntsmanLoot_NativeHunterGunClone_{i}"
+                    };
+                }
+                return materials;
+            }
+
+            static void NeutralizeProblematicTint(Material[] materials)
+            {
+                if (materials == null) return;
+
+                foreach (var material in materials)
+                {
+                    if (material == null) continue;
+
+                    if (material.HasProperty("_EmissionColor"))
+                        material.SetColor("_EmissionColor", Color.black);
+
+                    if (material.HasProperty("_Color"))
+                        NeutralizeRedColor(material, "_Color");
+                    if (material.HasProperty("_BaseColor"))
+                        NeutralizeRedColor(material, "_BaseColor");
+
+                    material.DisableKeyword("_EMISSION");
+                    material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+                }
+            }
+
+            static void NeutralizeRedColor(Material material, string property)
+            {
+                Color color = material.GetColor(property);
+                if (!IsStrongRedTint(color)) return;
+
+                material.SetColor(property, new Color(0.62f, 0.58f, 0.49f, color.a));
+            }
+
+            static bool IsStrongRedTint(Color color)
+            {
+                return color.r > 0.65f &&
+                       color.r > color.g * 1.6f &&
+                       color.r > color.b * 1.6f;
+            }
+
+            static Material[] CreateFallbackNeutralMaterials(Mesh mesh, ManualLogSource log)
+            {
+                Shader shader = Shader.Find("Standard")
+                             ?? Shader.Find("Universal Render Pipeline/Lit")
+                             ?? Shader.Find("HDRP/Lit")
+                             ?? Shader.Find("Diffuse");
+
+                if (shader == null)
+                {
+                    log.LogError("[HuntsmanLoot] Runtime neutral material failed: no compatible shader found");
+                    return null;
+                }
+
+                int count = Mathf.Max(1, mesh != null ? mesh.subMeshCount : 1);
+                var materials = new Material[count];
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    var material = new Material(shader)
+                    {
+                        name = $"HuntsmanLoot_FallbackHunterGunNeutral_{i}"
+                    };
+
+                    Color baseColor = i == 1
+                        ? new Color(0.42f, 0.34f, 0.23f, 1f)
+                        : new Color(0.40f, 0.39f, 0.34f, 1f);
+
+                    if (material.HasProperty("_Color"))
+                        material.SetColor("_Color", baseColor);
+                    if (material.HasProperty("_BaseColor"))
+                        material.SetColor("_BaseColor", baseColor);
+                    if (material.HasProperty("_EmissionColor"))
+                        material.SetColor("_EmissionColor", Color.black);
+                    if (material.HasProperty("_Metallic"))
+                        material.SetFloat("_Metallic", 0.15f);
+                    if (material.HasProperty("_Glossiness"))
+                        material.SetFloat("_Glossiness", 0.28f);
+
+                    material.DisableKeyword("_EMISSION");
+                    material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+                    materials[i] = material;
+                }
+
+                return materials;
+            }
+
+            internal static Material CreateFallbackMaterial(ManualLogSource log)
+            {
+                log.LogWarning("[HuntsmanLoot] Native material not found — using runtime fallback material.");
+
+                Shader shader = Shader.Find("Standard")
+                             ?? Shader.Find("Diffuse")
+                             ?? Shader.Find("Universal Render Pipeline/Lit")
+                             ?? Shader.Find("HDRP/Lit");
+
+                if (shader == null)
+                {
+                    log.LogError("[HuntsmanLoot] Runtime fallback material failed: no compatible shader found");
+                    return null;
+                }
+
+                return new Material(shader)
+                {
+                    name = "HuntsmanLoot_RuntimeHunterGunFallback",
+                    color = new Color(0.015f, 0.013f, 0.011f, 1f)
+                };
+            }
+
+            static Mesh FindNativeMesh()
+            {
+                foreach (var mesh in Resources.FindObjectsOfTypeAll<Mesh>())
+                    if (IsHunterGunMesh(mesh))
+                        return mesh;
+
+                foreach (var go in Resources.FindObjectsOfTypeAll<GameObject>())
+                {
+                    if (go == null || !NameSuggestsHunterGunContainer(go.name)) continue;
+
+                    var mesh = FindMeshInGameObject(go);
+                    if (mesh != null) return mesh;
+                }
+
+                return null;
+            }
+
+            static Material[] FindNativeMaterials()
+            {
+                var exactBase = new List<Material>();
+                var exactInstance = new List<Material>();
+                var related = new List<Material>();
+
+                foreach (var material in Resources.FindObjectsOfTypeAll<Material>())
+                {
+                    if (material == null) continue;
+
+                    string name = CleanName(material.name);
+                    if (name == NativeMaterialName)
+                    {
+                        if (IsInstanceName(material.name))
+                            exactInstance.Add(material);
+                        else
+                            exactBase.Add(material);
                         continue;
                     }
 
-                    var bakedGo = new GameObject($"{smr.gameObject.name}_BakedVisual");
-                    bakedGo.transform.SetParent(smr.transform.parent, false);
-                    bakedGo.transform.localPosition = smr.transform.localPosition;
-                    bakedGo.transform.localRotation = smr.transform.localRotation;
-                    bakedGo.transform.localScale = smr.transform.localScale;
-
-                    var mf = bakedGo.AddComponent<MeshFilter>();
-                    mf.sharedMesh = bakedMesh;
-
-                    var mr = bakedGo.AddComponent<MeshRenderer>();
-                    mr.sharedMaterials = smr.sharedMaterials;
-                    mr.enabled = true;
-
-                    bakedGo.SetActive(true);
-                    smr.enabled = false;
-                    bakedCount++;
+                    if (name.IndexOf(NativeMaterialName, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        name.IndexOf("Shoot", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        related.Add(material);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    log.LogWarning($"[HuntsmanLoot] SkinnedMeshRenderer bake failed: {ex.Message}");
-                }
+
+                if (exactBase.Count > 0) return exactBase.ToArray();
+                if (exactInstance.Count > 0) return exactInstance.ToArray();
+                if (related.Count > 0) return related.ToArray();
+                return null;
             }
 
-            log.LogInfo($"[HuntsmanLoot] SkinnedMeshRenderer bake: baked={bakedCount}");
-            return bakedCount;
-        }
-
-        static void StripNonVisualComponents(GameObject weaponVisual, ManualLogSource log)
-        {
-            int removed = 0;
-            int disabled = 0;
-
-            foreach (var component in weaponVisual.GetComponentsInChildren<Component>(true))
+            static void TryResolveFromGameObject(GameObject source, ResolveResult result)
             {
-                if (component == null || IsAllowedVisualComponent(component))
-                    continue;
+                if (source == null) return;
 
-                try
+                foreach (var meshFilter in source.GetComponentsInChildren<MeshFilter>(true))
                 {
-                    if (component is Behaviour behaviour)
-                    {
-                        behaviour.enabled = false;
-                        disabled++;
-                    }
-                    else if (component is Collider collider)
-                    {
-                        collider.enabled = false;
-                        disabled++;
-                    }
-                    else if (component is Rigidbody rigidbody)
-                    {
-                        rigidbody.detectCollisions = false;
-                        rigidbody.isKinematic = true;
-                        disabled++;
-                    }
+                    if (meshFilter == null || !IsHunterGunMesh(meshFilter.sharedMesh)) continue;
 
-                    Object.DestroyImmediate(component);
-                    removed++;
-                }
-                catch (Exception ex)
-                {
-                    log.LogWarning(
-                        $"[HuntsmanLoot] Visual cleanup skipped component {component.GetType().Name}: {ex.Message}");
+                    result.Mesh = meshFilter.sharedMesh;
+                    var renderer = meshFilter.GetComponent<MeshRenderer>();
+                    if (renderer != null && HasAnyMaterial(renderer.sharedMaterials))
+                        result.Materials = renderer.sharedMaterials;
+                    return;
                 }
             }
 
-            log.LogInfo($"[HuntsmanLoot] Huntsman weapon visual cleanup: removed={removed} disabled={disabled}");
-        }
+            static Mesh FindMeshInGameObject(GameObject go)
+            {
+                foreach (var meshFilter in go.GetComponentsInChildren<MeshFilter>(true))
+                    if (meshFilter != null && IsHunterGunMesh(meshFilter.sharedMesh))
+                        return meshFilter.sharedMesh;
 
-        static bool IsAllowedVisualComponent(Component component)
-        {
-            return component is Transform ||
-                   component is MeshRenderer ||
-                   component is SkinnedMeshRenderer ||
-                   component is MeshFilter;
-        }
+                return null;
+            }
 
-        static void DestroyDetachedVisual(GameObject weaponVisual)
-        {
-            if (weaponVisual != null)
-                Object.Destroy(weaponVisual);
-        }
+            static bool IsHunterGunMesh(Mesh mesh)
+            {
+                return mesh != null && CleanName(mesh.name) == NativeMeshName && mesh.vertexCount > 0;
+            }
 
-        // ── Luz pontual teal (complemento visual) ─────────────────────────────
+            static bool NameSuggestsHunterGunContainer(string name)
+            {
+                if (string.IsNullOrEmpty(name)) return false;
 
-        static void ApplyLight(GameObject spawned)
-        {
-            var go = new GameObject("HuntsmanGlow");
-            go.transform.SetParent(spawned.transform, false);
-            go.transform.localPosition = new Vector3(0f, 0.10f, 0f);
-            var l = go.AddComponent<Light>();
-            l.type      = LightType.Point;
-            l.color     = new Color(0.00f, 0.88f, 0.65f);
-            l.range     = 0.60f;
-            l.intensity = 0.65f;
-            l.shadows   = LightShadows.None;
+                return name.IndexOf("Enemy - Hunter", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       name.IndexOf("ANIM GUN", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       name.IndexOf("mesh gun", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            static string CleanName(string name)
+            {
+                if (string.IsNullOrEmpty(name)) return string.Empty;
+                const string instanceSuffix = " (Instance)";
+                return name.EndsWith(instanceSuffix, StringComparison.Ordinal)
+                    ? name.Substring(0, name.Length - instanceSuffix.Length)
+                    : name;
+            }
+
+            static bool IsInstanceName(string name)
+            {
+                return !string.IsNullOrEmpty(name) &&
+                       name.EndsWith(" (Instance)", StringComparison.Ordinal);
+            }
+
+            static string FormatMaterialNames(Material[] materials)
+            {
+                var names = new List<string>();
+                foreach (var material in materials)
+                {
+                    if (material == null) continue;
+                    names.Add(material.name);
+                }
+                return names.Count > 0 ? string.Join(",", names.ToArray()) : "none";
+            }
+
+            internal sealed class ResolveResult
+            {
+                internal Mesh Mesh;
+                internal Material[] Materials;
+            }
+
+            internal sealed class VisualAttachResult
+            {
+                internal bool Pass;
+                internal string Reason;
+                internal GameObject Root;
+
+                internal static VisualAttachResult Success(GameObject root)
+                {
+                    return new VisualAttachResult { Pass = true, Reason = "mesh-renderer", Root = root };
+                }
+
+                internal static VisualAttachResult Fail(string reason)
+                {
+                    return new VisualAttachResult { Pass = false, Reason = reason };
+                }
+            }
         }
 
         // ── Identidade ─────────────────────────────────────────────────────────
@@ -360,9 +519,9 @@ namespace HuntsmanLoot
             var attr = spawned.GetComponentInChildren<ItemAttributes>();
             if (attr == null)
             {
-                log.LogInfo("[HuntsmanLoot] Inventory identity fields found: none");
-                log.LogInfo("[HuntsmanLoot] Inventory display name updated: fail field=ItemAttributes");
-                log.LogInfo("[HuntsmanLoot] Inventory icon update: fail reason=ItemAttributes not found");
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory identity fields found: none");
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory display name updated: fail field=ItemAttributes");
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory icon update: fail reason=ItemAttributes not found");
                 return;
             }
 
@@ -393,6 +552,8 @@ namespace HuntsmanLoot
                 TryRecordField(typeof(ItemEquippable), "itemEmoji", foundFields);
             }
 
+            bool iconUpdated = ApplyInventoryIconOverride(attr, equippable, log);
+
             try
             {
                 var itemField = AccessTools.Field(typeof(ItemAttributes), "item");
@@ -417,25 +578,33 @@ namespace HuntsmanLoot
             }
             catch (Exception ex)
             {
-                log.LogWarning($"[HuntsmanLoot] Inventory item metadata clone failed: {ex.Message}");
+                HuntsmanLootPlugin.DebugWarning($"[HuntsmanLoot] Inventory item metadata clone failed: {ex.Message}");
             }
 
-            log.LogInfo(
+            HuntsmanLootPlugin.DebugLog(
                 $"[HuntsmanLoot] Inventory identity fields found: " +
                 $"{(foundFields.Count > 0 ? string.Join(",", foundFields.ToArray()) : "none")}");
 
             if (updatedFields.Count > 0)
-                log.LogInfo(
+                HuntsmanLootPlugin.DebugLog(
                     $"[HuntsmanLoot] Inventory display name updated: success field=" +
                     $"{string.Join(",", updatedFields.ToArray())}");
             else
-                log.LogInfo("[HuntsmanLoot] Inventory display name updated: fail field=none");
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory display name updated: fail field=none");
 
-            log.LogInfo(
-                "[HuntsmanLoot] Inventory icon update: unsupported " +
-                "reason=no safe custom sprite available for native shotgun base");
-            log.LogWarning(
+            HuntsmanLootPlugin.DebugLog(
+                "[HuntsmanLoot] Inventory icon update: " +
+                (iconUpdated ? "success" : "fail"));
+            HuntsmanLootPlugin.DebugWarning(
                 "[HuntsmanLoot] Inventory icon/name still uses native shotgun metadata — known limitation of native shotgun base.");
+            log.LogInfo("[HuntsmanLoot] Inventory name may remain SHOTGUN due to native shotgun metadata.");
+        }
+
+        static bool ApplyInventoryIconOverride(ItemAttributes attr, ItemEquippable equippable, ManualLogSource log)
+        {
+            log.LogInfo("[HuntsmanLoot] Inventory icon override disabled — native shotgun icon kept temporarily.");
+            return false;
+
         }
 
         static void TryRecordField(Type type, string fieldName, List<string> fields)
@@ -471,13 +640,6 @@ namespace HuntsmanLoot
             catch { }
 
             return spawned.GetComponentInChildren<ItemEquippable>();
-        }
-
-        private struct VisualRendererCounts
-        {
-            internal int MeshRenderers;
-            internal int SkinnedMeshRenderers;
-            internal int MeshFilters;
         }
 
         private sealed class VisualValidationResult
