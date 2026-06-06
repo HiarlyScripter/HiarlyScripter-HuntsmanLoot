@@ -20,6 +20,11 @@ namespace HuntsmanLoot
         private static readonly Vector3 NativeGunLocalPosition = new Vector3(0f, 0f, 0f);
         private static readonly Vector3 NativeGunLocalEuler    = new Vector3(-8f, 180f, 90f);
         private static readonly Vector3 NativeGunLocalScale    = new Vector3(0.75f, 0.75f, 0.75f);
+        private const string NativeCollisionEnvelopeName = "HuntsmanNativeGunCollisionEnvelope";
+        private const float CollisionLengthScale = 1.08f;
+        private const float CollisionWidthScale = 1.05f;
+        private const float CollisionThicknessScale = 1.10f;
+        private const float CollisionMinThickness = 0.04f;
 
         internal static void Apply(GameObject spawned, GameObject sourceEnemy, ManualLogSource log)
         {
@@ -102,6 +107,15 @@ namespace HuntsmanLoot
                 Object.Destroy(root);
                 return NativeHunterGunVisualResolver.VisualAttachResult.Fail(validation.Reason);
             }
+
+            var collisionResult = CreateNativeCollisionEnvelope(root, spawned, resolved.Mesh, log);
+            if (collisionResult.Created)
+                log.LogInfo(
+                    $"[HuntsmanLoot] Native collision envelope created: " +
+                    $"attachedRigidbody={collisionResult.AttachedRigidbody.ToString().ToLowerInvariant()} " +
+                    $"size={FormatVector(collisionResult.Size)}");
+            else
+                log.LogWarning($"[HuntsmanLoot] Native collision envelope skipped: reason={collisionResult.Reason}");
 
             return NativeHunterGunVisualResolver.VisualAttachResult.Success(root);
         }
@@ -195,12 +209,157 @@ namespace HuntsmanLoot
             return VisualValidationResult.Fail("no-enabled-renderer-with-mesh-and-material");
         }
 
+        static CollisionEnvelopeResult CreateNativeCollisionEnvelope(
+            GameObject visualRoot,
+            GameObject spawned,
+            Mesh mesh,
+            ManualLogSource log)
+        {
+            if (visualRoot == null) return CollisionEnvelopeResult.Skip("visual-root-null");
+            if (spawned == null) return CollisionEnvelopeResult.Skip("spawned-null");
+            if (mesh == null) return CollisionEnvelopeResult.Skip("mesh-null");
+
+            var bounds = mesh.bounds;
+            if (bounds.size.x <= 0f || bounds.size.y <= 0f || bounds.size.z <= 0f)
+                return CollisionEnvelopeResult.Skip("invalid-mesh-bounds");
+
+            try
+            {
+                var sourceCollider = FindNativeSourceCollider(spawned, visualRoot);
+                var envelope = new GameObject(NativeCollisionEnvelopeName);
+                envelope.transform.SetParent(visualRoot.transform, false);
+                envelope.transform.localPosition = Vector3.zero;
+                envelope.transform.localRotation = Quaternion.identity;
+                envelope.transform.localScale = Vector3.one;
+
+                CopyCollisionIdentity(envelope, sourceCollider, spawned);
+
+                var box = envelope.AddComponent<BoxCollider>();
+                box.isTrigger = false;
+                if (sourceCollider != null && sourceCollider.sharedMaterial != null)
+                    box.sharedMaterial = sourceCollider.sharedMaterial;
+
+                int lengthAxis = LongestAxis(bounds.size);
+                int thicknessAxis = SmallestAxis(bounds.size, lengthAxis);
+                var size = ExpandEnvelopeSize(bounds.size, lengthAxis, thicknessAxis);
+
+                box.center = bounds.center;
+                box.size = size;
+
+                bool attached = box.attachedRigidbody != null;
+                if (!attached)
+                {
+                    Object.Destroy(envelope);
+                    return CollisionEnvelopeResult.Skip("attached-rigidbody-null");
+                }
+
+                HuntsmanLootPlugin.DebugLog(
+                    $"[HuntsmanLoot] Native collision envelope center={FormatVector(box.center)} " +
+                    $"size={FormatVector(box.size)} lengthAxis={lengthAxis} thicknessAxis={thicknessAxis}");
+
+                return CollisionEnvelopeResult.Success(attached, box.center, box.size);
+            }
+            catch (Exception ex)
+            {
+                return CollisionEnvelopeResult.Skip(ex.Message);
+            }
+        }
+
+        static int LongestAxis(Vector3 size)
+        {
+            if (size.x >= size.y && size.x >= size.z) return 0;
+            if (size.y >= size.x && size.y >= size.z) return 1;
+            return 2;
+        }
+
+        static int SmallestAxis(Vector3 size, int excludedAxis)
+        {
+            int smallest = -1;
+            for (int i = 0; i < 3; i++)
+            {
+                if (i == excludedAxis) continue;
+                if (smallest < 0 || size[i] < size[smallest])
+                    smallest = i;
+            }
+            return smallest < 0 ? 0 : smallest;
+        }
+
+        static Vector3 ExpandEnvelopeSize(Vector3 sourceSize, int lengthAxis, int thicknessAxis)
+        {
+            var size = sourceSize;
+            for (int i = 0; i < 3; i++)
+            {
+                float scale = CollisionWidthScale;
+                if (i == lengthAxis)
+                    scale = CollisionLengthScale;
+                else if (i == thicknessAxis)
+                    scale = CollisionThicknessScale;
+
+                size[i] = Mathf.Max(sourceSize[i] * scale, CollisionMinThickness);
+            }
+            return size;
+        }
+
+        static Collider FindNativeSourceCollider(GameObject spawned, GameObject visualRoot)
+        {
+            if (spawned == null) return null;
+
+            foreach (var collider in spawned.GetComponentsInChildren<Collider>(true))
+            {
+                if (collider == null) continue;
+                if (visualRoot != null && collider.transform.IsChildOf(visualRoot.transform)) continue;
+                return collider;
+            }
+
+            return null;
+        }
+
+        static void CopyCollisionIdentity(GameObject envelope, Collider sourceCollider, GameObject spawned)
+        {
+            var source = sourceCollider != null ? sourceCollider.gameObject : spawned;
+            envelope.layer = source.layer;
+            envelope.tag = source.tag;
+        }
+
         static bool HasAnyMaterial(Material[] materials)
         {
             if (materials == null || materials.Length == 0) return false;
             foreach (var material in materials)
                 if (material != null) return true;
             return false;
+        }
+
+        struct CollisionEnvelopeResult
+        {
+            internal bool Created;
+            internal bool AttachedRigidbody;
+            internal Vector3 Center;
+            internal Vector3 Size;
+            internal string Reason;
+
+            internal static CollisionEnvelopeResult Success(bool attachedRigidbody, Vector3 center, Vector3 size)
+            {
+                return new CollisionEnvelopeResult
+                {
+                    Created = true,
+                    AttachedRigidbody = attachedRigidbody,
+                    Center = center,
+                    Size = size,
+                    Reason = "created"
+                };
+            }
+
+            internal static CollisionEnvelopeResult Skip(string reason)
+            {
+                return new CollisionEnvelopeResult
+                {
+                    Created = false,
+                    AttachedRigidbody = false,
+                    Center = Vector3.zero,
+                    Size = Vector3.zero,
+                    Reason = reason
+                };
+            }
         }
 
         static string FormatVector(Vector3 value)

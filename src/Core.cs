@@ -28,6 +28,7 @@ namespace HuntsmanLoot
         internal static readonly FieldInfo _healthField          = AccessTools.Field(typeof(Enemy),       "Health");
         internal static readonly FieldInfo _hpCurrentField       = AccessTools.Field(typeof(EnemyHealth), "healthCurrent");
         internal static readonly FieldInfo _numberOfBulletsField = AccessTools.Field(typeof(ItemGun),     "numberOfBullets");
+        internal static readonly FieldInfo _batteryLifeIntField  = AccessTools.Field(typeof(ItemBattery), "batteryLifeInt");
         internal static readonly FieldInfo _enemyParentField     = AccessTools.Field(typeof(EnemyParent), "Enemy");
 
         private void Awake()
@@ -87,7 +88,8 @@ namespace HuntsmanLoot
                      $"HasHealth={_hasHealthField != null}, " +
                      $"Health={_healthField != null}, " +
                      $"healthCurrent={_hpCurrentField != null}, " +
-                     $"numberOfBullets={_numberOfBulletsField != null}");
+                     $"numberOfBullets={_numberOfBulletsField != null}, " +
+                     $"batteryLifeInt={_batteryLifeIntField != null}");
 
             if (_hasHealthField == null || _healthField == null || _hpCurrentField == null)
                 Log.LogError("[HuntsmanLoot] ATENCAO: campos de saude nao encontrados — deteccao de morte pode falhar!");
@@ -98,47 +100,86 @@ namespace HuntsmanLoot
         {
             if (spawned == null) return;
 
-            var gun = spawned.GetComponentInChildren<ItemGun>();
-            if (gun == null || _numberOfBulletsField == null) return;
-
-            int current = (int)_numberOfBulletsField.GetValue(gun);
             var battery = spawned.GetComponentInChildren<ItemBattery>();
-            int maxAmmo = Mathf.Max(1, GetAmmoCapacity(current, battery));
+            if (battery == null)
+            {
+                Log.LogWarning("[HuntsmanLoot] Ammo apply failed: expected=unknown actual=no-battery");
+                return;
+            }
+
+            int maxAmmo = Mathf.Max(1, GetAmmoCapacity(battery));
             int finalAmmo;
 
             if (RandomizeAmmo.Value)
             {
                 finalAmmo = RollWeightedAmmo(maxAmmo);
-                DebugLog($"[HuntsmanLoot] Ammo randomized: current={current} max={maxAmmo} final={finalAmmo}");
+                DebugLog($"[HuntsmanLoot] Ammo randomized: max={maxAmmo} final={finalAmmo}");
             }
             else
             {
                 finalAmmo = maxAmmo;
-                DebugLog($"[HuntsmanLoot] Ammo kept full: current={current} max={maxAmmo}");
+                DebugLog($"[HuntsmanLoot] Ammo kept full: max={maxAmmo}");
             }
 
             finalAmmo = Mathf.Clamp(finalAmmo, 1, maxAmmo);
-            _numberOfBulletsField.SetValue(gun, finalAmmo);
-
-            if (battery != null)
-            {
-                int pct = Mathf.Clamp((int)Math.Round((float)finalAmmo / maxAmmo * 100f), 0, 100);
-                battery.SetBatteryLife(pct);
-                DebugLog($"[HuntsmanLoot] BatteryLife: {finalAmmo}/{maxAmmo} -> {pct}%");
-            }
+            var state = spawned.GetComponent<HuntsmanLootAmmoState>()
+                        ?? spawned.AddComponent<HuntsmanLootAmmoState>();
+            state.finalAmmo = finalAmmo;
+            state.maxAmmo = maxAmmo;
+            state.applied = false;
+            state.source = "spawn";
 
             Log.LogInfo($"[HuntsmanLoot] Ammo final: {finalAmmo}/{maxAmmo}");
         }
 
-        static int GetAmmoCapacity(int current, ItemBattery battery)
+        internal static bool ApplyAmmoState(ItemBattery battery, HuntsmanLootAmmoState state, string source)
+        {
+            if (battery == null || state == null) return false;
+
+            int maxAmmo = Mathf.Max(1, state.maxAmmo);
+            if (battery.batteryBars > 0)
+                maxAmmo = battery.batteryBars;
+
+            int expected = Mathf.Clamp(state.finalAmmo, 1, maxAmmo);
+            int pct = Mathf.Clamp((int)Math.Round((float)expected / maxAmmo * 100f), 0, 100);
+            battery.SetBatteryLife(pct);
+
+            int actual = ReadBatteryLifeInt(battery);
+            state.finalAmmo = expected;
+            state.maxAmmo = maxAmmo;
+            state.applied = actual == expected;
+            state.source = source;
+
+            if (state.applied)
+            {
+                Log.LogInfo(
+                    $"[HuntsmanLoot] Ammo applied: expected={expected}/{maxAmmo} " +
+                    $"actual={actual} battery={battery.batteryLife:0.##} source={source}");
+            }
+            else
+            {
+                Log.LogWarning(
+                    $"[HuntsmanLoot] Ammo apply failed: expected={expected} " +
+                    $"actual={actual} battery={battery.batteryLife:0.##} source={source}");
+            }
+
+            return state.applied;
+        }
+
+        static int ReadBatteryLifeInt(ItemBattery battery)
+        {
+            if (battery == null || _batteryLifeIntField == null)
+                return -1;
+
+            return (int)_batteryLifeIntField.GetValue(battery);
+        }
+
+        static int GetAmmoCapacity(ItemBattery battery)
         {
             if (battery != null && battery.batteryBars > 0)
                 return battery.batteryBars;
 
-            if (current > 0)
-                return current;
-
-            return 4;
+            return 5;
         }
 
         static int RollWeightedAmmo(int maxAmmo)
@@ -205,6 +246,14 @@ namespace HuntsmanLoot
         }
     }
 
+    internal sealed class HuntsmanLootAmmoState : MonoBehaviour
+    {
+        internal int finalAmmo;
+        internal int maxAmmo;
+        internal bool applied;
+        internal string source;
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     //  HuntsmanPatches — patches Harmony
     // ──────────────────────────────────────────────────────────────────────────
@@ -216,6 +265,24 @@ namespace HuntsmanLoot
         // Runtime capture encerrado. A rota atual usa Mesh/Material nativos do jogo.
         static void ClearPendingVisual()
         {
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ItemBattery), "Start")]
+        static void OnItemBatteryStartPost(ItemBattery __instance)
+        {
+            try
+            {
+                var state = __instance.GetComponentInParent<HuntsmanLootAmmoState>();
+                if (state == null) return;
+
+                HuntsmanLootPlugin.ApplyAmmoState(__instance, state, "ItemBattery.StartPostfix");
+            }
+            catch (Exception ex)
+            {
+                HuntsmanLootPlugin.Log.LogWarning(
+                    $"[HuntsmanLoot] Ammo apply failed: expected=unknown actual=exception source=ItemBattery.StartPostfix error={ex.Message}");
+            }
         }
 
         // ── 1. POST-DESPAWN: detecta morte e dropa a arma ─────────────────────
