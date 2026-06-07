@@ -1,5 +1,12 @@
 # Changelog — Huntsman Loot
 
+## Proxima release (nao publicada) - 2026-06-07
+- Corrigido o icone da Huntsman Rifle no inventario usando render real via `SemiIconMaker`.
+- Ajustado o enquadramento da camera de icone para mostrar a arma dentro do quadrado, em vez de apenas o cano.
+- Corrigida a orientacao do icone invertendo o vetor `upWorld`/roll da camera, sem alterar o enquadramento aprovado.
+- Removida a rota de sprite runtime desenhado/procedural para o icone.
+- Teste visual aprovado e `LogOutput.log` sem erros relacionados ao HuntsmanLoot.
+
 ## v1.1.1 (2026-05-19)
 - Corrigida barra verde (bateria) que aparecia sobre a arma no chão e nunca depleta
 - A barra verde sobrepunha a barra amarela de munição, ocultando a animação de recarga com cristal

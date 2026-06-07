@@ -137,6 +137,26 @@ battery.SetBatteryLife(pct);  // public — sem reflexão
 
 ---
 
+## Checkpoint aprovado - 2026-06-07 - Icone real da Huntsman Rifle no inventario
+
+**Causa do problema:** depois que a arma passou a usar a mesh nativa `Hunter Gun`, o icone do inventario continuava sendo gerado pelo `SemiIconMaker` configurado para o prefab funcional da shotgun. Como a Hunter Gun e muito mais comprida, a camera de icone enquadrava quase so a ponta/cano. Tentativas anteriores com sprite runtime desenhado foram rejeitadas por nao representarem o render real do item.
+
+**Correcao aplicada:** mantida a rota nativa de render via `SemiIconMaker`, sem sprite manual/procedural. O mod limpa `ItemAttributes.icon` e `ItemEquippable.ItemIcon` para permitir a geracao nativa do icone do item, remove o cache local `Cache/Icons/Items/huntsman rifle.png` quando necessario e ajusta somente a camera de icone da instancia.
+
+**Enquadramento:** `ConfigureNativeIconCamera()` calcula os bounds reais dos renderers do visual `HuntsmanNativeGunVisualRoot`, escolhe uma vista lateral pelo eixo mais fino da mesh e ajusta `Camera.orthographic`, `orthographicSize`, distancia e rotacao para a arma caber dentro do quadrado do inventario. O ajuste preserva a mesh/material/transform do mundo.
+
+**Orientacao:** a imagem aprovada ficou inicialmente de cabeca para baixo. A correcao final inverteu apenas o vetor `upWorld` usado em `Quaternion.LookRotation(forwardWorld, upWorld)`, equivalente a corrigir o roll da camera do icone sem alterar zoom, padding ou bounds.
+
+**Confirmacoes de escopo:**
+- Nao usa sprite desenhado manualmente.
+- Nao cria textura procedural de arma.
+- Nao muda mesh, material, drop, ammo, fisica ou collision.
+- Continua usando a shotgun nativa como base funcional e a mesh nativa `Hunter Gun` como visual.
+
+**Teste aprovado:** teste visual confirmou icone com enquadramento correto, orientacao corrigida, render real via `SemiIconMaker` e sem mostrar apenas o cano. `LogOutput.log` foi analisado sem erros relacionados ao HuntsmanLoot; o log confirmou carregamento v1.1.3, Harmony aplicado, drop apenas com HP 0, mesh Hunter Gun encontrada, visual nativo criado, collision envelope criado, icon framing adjusted, icon override disabled, icon update success, Customizer DONE e ammo aplicada corretamente.
+
+---
+
 ## Arquitetura do mod
 
 - **`Core.cs`** — entrada BepInEx, configs, 3 patches Harmony: `EnemyHunter.Awake` (mesh), `EnemyParent.Despawn` (drop), `Debug.LogWarning` (supressão)

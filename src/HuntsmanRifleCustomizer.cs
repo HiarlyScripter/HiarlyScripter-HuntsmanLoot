@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Reflection;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -26,6 +27,10 @@ namespace HuntsmanLoot
         private const float CollisionThicknessScale = 1.10f;
         private const float CollisionMinThickness = 0.04f;
         private const string DisplayName = "Huntsman Rifle";
+        private const float IconFramingPadding = 1.16f;
+        private const float IconCameraDistanceMultiplier = 2.5f;
+        private const float IconCameraMinDistance = 1.25f;
+        private static bool _generatedIconCacheCleared;
 
         internal static void Apply(GameObject spawned, GameObject sourceEnemy, ManualLogSource log)
         {
@@ -118,6 +123,8 @@ namespace HuntsmanLoot
             else
                 log.LogWarning($"[HuntsmanLoot] Native collision envelope skipped: reason={collisionResult.Reason}");
 
+            ConfigureNativeIconCamera(spawned, root, log);
+
             return NativeHunterGunVisualResolver.VisualAttachResult.Success(root);
         }
 
@@ -177,6 +184,176 @@ namespace HuntsmanLoot
                 cur = cur.parent;
             }
             return false;
+        }
+
+        static void ConfigureNativeIconCamera(GameObject spawned, GameObject visualRoot, ManualLogSource log)
+        {
+            try
+            {
+                var iconMaker = spawned.GetComponentInChildren<SemiIconMaker>(true);
+                if (iconMaker == null)
+                {
+                    HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory icon framing skipped: reason=SemiIconMaker not found");
+                    return;
+                }
+
+                var camera = iconMaker.iconCamera ?? iconMaker.GetComponentInChildren<Camera>(true);
+                if (camera == null)
+                {
+                    HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory icon framing skipped: reason=icon camera not found");
+                    return;
+                }
+
+                if (!TryGetLocalRendererBounds(spawned.transform, visualRoot, out Bounds bounds, out Vector3[] corners))
+                {
+                    HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory icon framing skipped: reason=visual bounds unavailable");
+                    return;
+                }
+
+                int lengthAxis = LongestAxis(bounds.size);
+                int viewAxis = SmallestAxis(bounds.size, lengthAxis);
+                Vector3 longLocal = AxisVector(lengthAxis);
+                Vector3 forwardLocal = AxisVector(viewAxis);
+                Vector3 upLocal = Vector3.Cross(forwardLocal, longLocal).normalized;
+                if (upLocal.sqrMagnitude < 0.0001f)
+                    upLocal = AxisVector(NextAxis(lengthAxis, viewAxis));
+
+                Vector3 rightLocal = Vector3.Cross(upLocal, forwardLocal).normalized;
+                if (Vector3.Dot(rightLocal, longLocal) < 0f)
+                {
+                    rightLocal = -rightLocal;
+                    upLocal = -upLocal;
+                }
+
+                float width = ProjectSpan(corners, bounds.center, rightLocal);
+                float height = ProjectSpan(corners, bounds.center, upLocal);
+                float aspect = GetIconCameraAspect(iconMaker, camera);
+                float orthographicSize = Mathf.Max(
+                    Mathf.Max(height * 0.5f, width / (2f * aspect)) * IconFramingPadding,
+                    0.05f);
+
+                Vector3 centerWorld = spawned.transform.TransformPoint(bounds.center);
+                Vector3 forwardWorld = spawned.transform.TransformDirection(forwardLocal).normalized;
+                Vector3 upWorld = -spawned.transform.TransformDirection(upLocal).normalized;
+                float distance = Mathf.Max(IconCameraMinDistance, bounds.size.magnitude * IconCameraDistanceMultiplier);
+
+                camera.orthographic = true;
+                camera.orthographicSize = orthographicSize;
+                camera.nearClipPlane = 0.01f;
+                camera.farClipPlane = Mathf.Max(camera.farClipPlane, distance + bounds.size.magnitude * 3f);
+                camera.transform.position = centerWorld - forwardWorld * distance;
+                camera.transform.rotation = Quaternion.LookRotation(forwardWorld, upWorld);
+
+                iconMaker.iconCamera = camera;
+                iconMaker.iconCameraPlacementDone = true;
+
+                HuntsmanLootPlugin.DebugLog(
+                    "[HuntsmanLoot] Inventory icon framing adjusted: " +
+                    $"lengthAxis={lengthAxis} viewAxis={viewAxis} ortho={orthographicSize.ToString("0.###", CultureInfo.InvariantCulture)}");
+            }
+            catch (Exception ex)
+            {
+                HuntsmanLootPlugin.DebugWarning($"[HuntsmanLoot] Inventory icon framing failed: {ex.Message}");
+            }
+        }
+
+        static bool TryGetLocalRendererBounds(
+            Transform itemRoot,
+            GameObject visualRoot,
+            out Bounds bounds,
+            out Vector3[] corners)
+        {
+            bounds = default;
+            corners = null;
+            if (itemRoot == null || visualRoot == null) return false;
+
+            var points = new List<Vector3>();
+            foreach (var renderer in visualRoot.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer == null || !renderer.enabled) continue;
+                AddLocalBoundsCorners(itemRoot, renderer.bounds, points);
+            }
+
+            if (points.Count == 0) return false;
+
+            bounds = new Bounds(points[0], Vector3.zero);
+            for (int i = 1; i < points.Count; i++)
+                bounds.Encapsulate(points[i]);
+
+            corners = BoundsCorners(bounds);
+            return bounds.size.x > 0f && bounds.size.y > 0f && bounds.size.z > 0f;
+        }
+
+        static void AddLocalBoundsCorners(Transform itemRoot, Bounds worldBounds, List<Vector3> points)
+        {
+            Vector3 min = worldBounds.min;
+            Vector3 max = worldBounds.max;
+            points.Add(itemRoot.InverseTransformPoint(new Vector3(min.x, min.y, min.z)));
+            points.Add(itemRoot.InverseTransformPoint(new Vector3(min.x, min.y, max.z)));
+            points.Add(itemRoot.InverseTransformPoint(new Vector3(min.x, max.y, min.z)));
+            points.Add(itemRoot.InverseTransformPoint(new Vector3(min.x, max.y, max.z)));
+            points.Add(itemRoot.InverseTransformPoint(new Vector3(max.x, min.y, min.z)));
+            points.Add(itemRoot.InverseTransformPoint(new Vector3(max.x, min.y, max.z)));
+            points.Add(itemRoot.InverseTransformPoint(new Vector3(max.x, max.y, min.z)));
+            points.Add(itemRoot.InverseTransformPoint(new Vector3(max.x, max.y, max.z)));
+        }
+
+        static Vector3[] BoundsCorners(Bounds bounds)
+        {
+            Vector3 min = bounds.min;
+            Vector3 max = bounds.max;
+            return new[]
+            {
+                new Vector3(min.x, min.y, min.z),
+                new Vector3(min.x, min.y, max.z),
+                new Vector3(min.x, max.y, min.z),
+                new Vector3(min.x, max.y, max.z),
+                new Vector3(max.x, min.y, min.z),
+                new Vector3(max.x, min.y, max.z),
+                new Vector3(max.x, max.y, min.z),
+                new Vector3(max.x, max.y, max.z)
+            };
+        }
+
+        static float ProjectSpan(Vector3[] points, Vector3 center, Vector3 axis)
+        {
+            float min = float.MaxValue;
+            float max = float.MinValue;
+            for (int i = 0; i < points.Length; i++)
+            {
+                float value = Vector3.Dot(points[i] - center, axis);
+                if (value < min) min = value;
+                if (value > max) max = value;
+            }
+
+            return Mathf.Max(0.01f, max - min);
+        }
+
+        static float GetIconCameraAspect(SemiIconMaker iconMaker, Camera camera)
+        {
+            if (iconMaker != null && iconMaker.renderTexture != null && iconMaker.renderTexture.height > 0)
+                return Mathf.Max(0.01f, (float)iconMaker.renderTexture.width / iconMaker.renderTexture.height);
+
+            return camera != null && camera.aspect > 0f ? camera.aspect : 1f;
+        }
+
+        static Vector3 AxisVector(int axis)
+        {
+            switch (axis)
+            {
+                case 0: return Vector3.right;
+                case 1: return Vector3.up;
+                default: return Vector3.forward;
+            }
+        }
+
+        static int NextAxis(int first, int second)
+        {
+            for (int axis = 0; axis < 3; axis++)
+                if (axis != first && axis != second)
+                    return axis;
+
+            return 1;
         }
 
         static VisualValidationResult HasRenderableVisual(GameObject root)
@@ -766,97 +943,48 @@ namespace HuntsmanLoot
         {
             try
             {
-                Sprite icon = CreateRuntimeInventoryIcon();
-                if (icon == null)
-                {
-                    log.LogInfo("[HuntsmanLoot] Inventory icon override unavailable; native shotgun icon kept.");
-                    return false;
-                }
-
-                attr.icon = icon;
+                attr.icon = null;
                 var hasIconField = AccessTools.Field(typeof(ItemAttributes), "hasIcon");
-                hasIconField?.SetValue(attr, true);
+                hasIconField?.SetValue(attr, false);
 
                 if (equippable != null)
-                    equippable.ItemIcon = icon;
+                    equippable.ItemIcon = null;
 
-                log.LogInfo("[HuntsmanLoot] Inventory icon override: success");
+                ClearGeneratedIconCacheOnce();
+                HuntsmanLootPlugin.DebugLog("[HuntsmanLoot] Inventory icon override disabled; native item icon generation enabled.");
                 return true;
             }
             catch (Exception ex)
             {
                 HuntsmanLootPlugin.DebugWarning($"[HuntsmanLoot] Inventory icon override failed: {ex.Message}");
-                log.LogInfo("[HuntsmanLoot] Inventory icon override unavailable; native shotgun icon kept.");
                 return false;
             }
 
         }
 
-        static Sprite CreateRuntimeInventoryIcon()
+        static void ClearGeneratedIconCacheOnce()
         {
-            const int width = 128;
-            const int height = 128;
+            if (_generatedIconCacheCleared) return;
+            _generatedIconCacheCleared = true;
 
-            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
-            texture.name = "Huntsman Rifle Inventory Icon";
-
-            var clear = new Color32(0, 0, 0, 0);
-            var pixels = new Color32[width * height];
-            for (int i = 0; i < pixels.Length; i++)
-                pixels[i] = clear;
-            texture.SetPixels32(pixels);
-
-            var barrel = new Color32(210, 188, 138, 255);
-            var metal = new Color32(62, 55, 48, 255);
-            var shadow = new Color32(18, 15, 12, 220);
-
-            DrawLine(texture, new Vector2(30f, 80f), new Vector2(105f, 35f), 6, barrel);
-            DrawLine(texture, new Vector2(31f, 84f), new Vector2(107f, 39f), 2, shadow);
-            DrawLine(texture, new Vector2(65f, 61f), new Vector2(76f, 54f), 10, metal);
-            DrawLine(texture, new Vector2(48f, 71f), new Vector2(61f, 63f), 8, metal);
-            DrawLine(texture, new Vector2(30f, 80f), new Vector2(18f, 95f), 8, metal);
-            DrawLine(texture, new Vector2(18f, 95f), new Vector2(25f, 106f), 7, metal);
-            DrawLine(texture, new Vector2(46f, 72f), new Vector2(49f, 92f), 3, metal);
-            DrawLine(texture, new Vector2(49f, 92f), new Vector2(61f, 81f), 3, metal);
-            DrawLine(texture, new Vector2(100f, 37f), new Vector2(112f, 30f), 4, metal);
-
-            texture.Apply(false, false);
-            return Sprite.Create(texture, new Rect(0f, 0f, width, height), new Vector2(0.5f, 0.5f), 128f);
-        }
-
-        static void DrawLine(Texture2D texture, Vector2 start, Vector2 end, int radius, Color32 color)
-        {
-            int steps = Mathf.CeilToInt(Vector2.Distance(start, end));
-            if (steps <= 0)
+            try
             {
-                DrawCircle(texture, Mathf.RoundToInt(start.x), Mathf.RoundToInt(start.y), radius, color);
-                return;
-            }
+                string path = Path.Combine(
+                    Application.persistentDataPath,
+                    "Cache",
+                    "Icons",
+                    "Items",
+                    DisplayName.ToLowerInvariant() + ".png");
 
-            for (int i = 0; i <= steps; i++)
-            {
-                float t = (float)i / steps;
-                var point = Vector2.Lerp(start, end, t);
-                DrawCircle(texture, Mathf.RoundToInt(point.x), Mathf.RoundToInt(point.y), radius, color);
-            }
-        }
-
-        static void DrawCircle(Texture2D texture, int cx, int cy, int radius, Color32 color)
-        {
-            int radiusSq = radius * radius;
-            for (int y = -radius; y <= radius; y++)
-            {
-                for (int x = -radius; x <= radius; x++)
+                if (File.Exists(path))
                 {
-                    if (x * x + y * y > radiusSq) continue;
-
-                    int px = cx + x;
-                    int py = cy + y;
-                    if (px < 0 || py < 0 || px >= texture.width || py >= texture.height)
-                        continue;
-
-                    texture.SetPixel(px, py, color);
+                    File.Delete(path);
+                    HuntsmanLootPlugin.DebugLog($"[HuntsmanLoot] Inventory icon cache cleared: {path}");
                 }
+            }
+            catch (Exception ex)
+            {
+                HuntsmanLootPlugin.DebugWarning($"[HuntsmanLoot] Inventory icon cache clear failed: {ex.Message}");
             }
         }
 
