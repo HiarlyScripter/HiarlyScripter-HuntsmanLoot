@@ -3,21 +3,43 @@
 ---
 
 ## v1.1.3 — 2026-06-07
-**Compatibilidade:** R.E.P.O. Build `23250495` · BepInEx `5.4.23.5`
+**Compatibilidade / Compatibility:** R.E.P.O. Build `23250495` · BepInEx `5.4.23.5`
 
-### Visual real da Huntsman Rifle
-- A arma dropada agora usa a mesh nativa `Hunter Gun` do próprio jogo — sem empacotar asset extraído do jogo
-- Nome do item exibido como **Huntsman Rifle** no inventário
-- Visual aprovado com cor e material nativos; transform calibrado para orientação correta no drop
-- Ícone do inventário corrigido com render real da arma via sistema nativo do jogo (sem sprite procedural)
+### 🇧🇷 PT-BR
 
-### Corrigido
-- Ammo corrigida: o valor real de munição é `ItemBattery.batteryLifeInt`/`batteryBars`, não `numberOfBullets` (que é pellets por disparo)
-- Collision envelope corrigido: BoxCollider único baseado nos bounds reais da mesh, sem MeshCollider
-- Barra de bateria verde suprimida corretamente no item dropado
+#### Visual real da Huntsman Rifle
+- A arma dropada agora usa a mesh nativa `Hunter Gun` do próprio jogo por referência runtime — sem empacotar asset extraído, sem copiar asset de mod de referência
+- Nome exibido como **Huntsman Rifle** no inventário
+- Visual aprovado com cor e material nativos; transform calibrado para orientação correta
+- Ícone do inventário corrigido via render real da arma pelo sistema nativo (sem sprite procedural)
 
-### Limitação conhecida
-- Por usar a base funcional da shotgun nativa, pode haver clipping visual leve em parede/canto; não afeta o gameplay
+#### Corrigido
+- Ammo corrigida: o valor real é `ItemBattery.batteryLifeInt` / `batteryBars`, não `numberOfBullets` (que é pellets por disparo)
+- Collision envelope: BoxCollider único baseado nos bounds reais da mesh, sem MeshCollider
+- Barra verde suprimida corretamente no item dropado
+- Logs de diagnóstico limpos; `EnableDebugLogging` desativado no build de release
+
+#### Limitação conhecida
+- Por usar a base funcional da shotgun nativa, pode haver clipping visual leve em paredes/cantos; não afeta o gameplay
+
+---
+
+### 🇺🇸 English
+
+#### Real Huntsman Rifle visual
+- Dropped weapon now uses the game's native `Hunter Gun` mesh via runtime reference — no extracted assets bundled, no reference mod assets copied
+- Inventory name now shows as **Huntsman Rifle**
+- Native color and material; transform calibrated for correct drop orientation
+- Inventory icon fixed via native game render system (no procedural sprite)
+
+#### Fixed
+- Ammo fixed: real ammo value is `ItemBattery.batteryLifeInt` / `batteryBars`, not `numberOfBullets` (which is pellets per shot)
+- Collision envelope: single BoxCollider based on real mesh bounds, no MeshCollider
+- Green battery bar correctly suppressed on dropped item
+- Diagnostic logs cleaned; `EnableDebugLogging` disabled in release build
+
+#### Known limitation
+- Being a long weapon using the native shotgun's functional base, minor visual clipping may occur at walls/corners; does not affect gameplay
 
 ---
 

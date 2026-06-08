@@ -2,34 +2,53 @@
 
 ## v1.1.3 — 2026-06-07
 
-### Visual real da Huntsman Rifle
-- A arma dropada agora usa a mesh nativa `Hunter Gun` do proprio jogo via referencia runtime — sem empacotar mesh extraida do jogo, sem copiar asset de mod de referencia.
-- Visual aprovado: `localPosition=(0,0,0)`, `localEuler=(-8,180,90)`, `localScale=(0.75,0.75,0.75)`.
-- Cor e material normalizados via native-clone do prefab nativo.
-- Nome do item agora aparece como **Huntsman Rifle** no inventario.
+### 🇧🇷 PT-BR
 
-### Icone corrigido
-- Icone do inventario corrigido com render real via `SemiIconMaker`.
-- Enquadramento da camera de icone ajustado para mostrar a arma inteira dentro do quadrado, em vez de apenas o cano.
-- Orientacao corrigida invertendo o vetor `upWorld` da camera, sem alterar zoom ou enquadramento.
-- Removida rota de sprite procedural/desenhado em runtime.
+#### Visual real da Huntsman Rifle
+- Arma dropada usa a mesh nativa `Hunter Gun` do jogo por referência runtime — sem empacotar asset extraído, sem copiar asset de mod de referência
+- Nome: **Huntsman Rifle** no inventário
+- Cor e material nativos; transform calibrado: `localEuler=(-8,180,90)`, `localScale=(0.75,0.75,0.75)`
+- Ícone corrigido via render real por `SemiIconMaker` (sem sprite procedural)
 
-### Ammo real corrigida
-- `ItemGun.numberOfBullets` nao era ammo — e quantidade de pellets/projeteis por disparo. Corrigido.
-- Ammo real e `ItemBattery.batteryLifeInt`; maximo real e `ItemBattery.batteryBars`.
-- Correcao aplicada via marker + postfix em `ItemBattery.Start` para evitar reset para cheio.
+#### Ammo real corrigida
+- `ItemGun.numberOfBullets` é pellets por disparo, não ammo — corrigido
+- Ammo real: `ItemBattery.batteryLifeInt` / `batteryBars`
+- Correção via marker + postfix em `ItemBattery.Start`
 
-### Collision envelope
-- BoxCollider unico baseado em `mesh.bounds` do visual.
-- Sem MeshCollider, sem Rigidbody novo, sem trigger.
-- `attachedRigidbody` confirmado presente.
+#### Collision
+- BoxCollider único baseado em `mesh.bounds`; sem MeshCollider, sem trigger
 
-### Qualidade
-- Logs de diagnostico limpos; `EnableDebugLogging` desativado no perfil de teste.
-- Build Release: 0 erros / 0 warnings.
+#### Qualidade
+- Logs limpos; build 0 erros / 0 warnings
 
-### Limitacao conhecida
-- Por ser uma arma longa usando a base funcional da shotgun nativa, pode haver clipping visual leve em parede/quina. Nao afeta gameplay.
+#### Limitação conhecida
+- Clipping visual leve possível em paredes/cantos — não afeta gameplay
+
+---
+
+### 🇺🇸 English
+
+#### Real Huntsman Rifle visual
+- Dropped weapon uses game's native `Hunter Gun` mesh via runtime reference — no extracted assets bundled, no reference mod assets copied
+- Inventory name: **Huntsman Rifle**
+- Native color and material; transform `localEuler=(-8,180,90)`, `localScale=(0.75,0.75,0.75)`
+- Inventory icon fixed via native `SemiIconMaker` render (no procedural sprite)
+
+#### Real ammo fixed
+- `ItemGun.numberOfBullets` is pellets per shot, not ammo — fixed
+- Real ammo: `ItemBattery.batteryLifeInt` / `batteryBars`
+- Fixed via marker + postfix on `ItemBattery.Start`
+
+#### Collision
+- Single BoxCollider from `mesh.bounds`; no MeshCollider, no trigger
+
+#### Quality
+- Clean logs; build 0 errors / 0 warnings
+
+#### Known limitation
+- Minor visual clipping possible at walls/corners — does not affect gameplay
+
+---
 
 ## v1.1.1 (2026-05-19)
 - Corrigida barra verde (bateria) que aparecia sobre a arma no chão e nunca depleta
@@ -44,9 +63,8 @@
 - Dependência do BepInExPack atualizada para `5.4.2305`
 
 ## v1.0.0
-- Lançamento inicial.
-- Drop da espingarda ao matar o Huntsman.
-- Chance de drop configurável (1–100%).
-- Modo berserk: drop exclusivo de Huntsmans berserk (requer BerserkerEnemies).
-- Suporte a multiplayer via PhotonNetwork.
-- Compatível com REPO v0.4.x.
+- Lançamento inicial / Initial release
+- Drop da espingarda ao matar o Huntsman / Shotgun drop on Huntsman death
+- Chance de drop configurável (1–100%) / Configurable drop chance (1–100%)
+- Modo berserk: drop exclusivo de Huntsmans berserk / Berserk mode: berserk-only drop
+- Suporte a multiplayer via PhotonNetwork / Multiplayer support via PhotonNetwork

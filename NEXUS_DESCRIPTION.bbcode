@@ -1,0 +1,102 @@
+[center][img]https://i.imgur.com/placeholder_banner.png[/img][/center]
+[center][url=https://thunderstore.io/c/repo/p/HiarlyScripter/HuntsmanLoot/][img]https://img.shields.io/badge/Thunderstore-HuntsmanLoot-00dfa0?style=flat-square[/img][/url]  [img]https://img.shields.io/badge/BepInEx-5.4.23.5-green?style=flat-square[/img]  [img]https://img.shields.io/badge/R.E.P.O.-Build%2023250495-blue?style=flat-square[/img][/center]
+
+[line]
+
+[size=5][b]🇧🇷 Português[/b][/size]
+
+[size=4][b]O que faz este mod?[/b][/size]
+
+Faz o Huntsman dropar a própria arma ([b]Huntsman Rifle[/b]) ao morrer.
+
+A arma exibida usa a [b]mesh nativa Hunter Gun do próprio jogo[/b] — sem empacotar assets extraídos, sem copiar assets de mods de referência. Referência runtime 100% limpa.
+
+[size=4][b]Funcionalidades[/b][/size]
+[list]
+[*][b]Visual real[/b] — mesh Hunter Gun nativa, cor e material originais do jogo
+[*][b]Nome correto[/b] — "Huntsman Rifle" no inventário e UI
+[*][b]Ícone real[/b] — renderizado pelo sistema nativo [i]SemiIconMaker[/i] (não é sprite procedural)
+[*][b]Ammo real[/b] — via [font=Courier New]ItemBattery.batteryLifeInt / batteryBars[/font] (randomizado no drop)
+[*][b]Collision real[/b] — BoxCollider baseado nos bounds reais da mesh
+[*][b]Multiplayer[/b] — drop via PhotonNetwork, visível para todos os jogadores na sala
+[*][b]Modo berserk[/b] — opção para drop exclusivo de Huntsmans em berserk
+[*][b]Zero dependências extras[/b] — só BepInEx obrigatório
+[/list]
+
+[size=4][b]Configurações[/b][/size]
+
+[code]
+[HuntsmanLoot]
+DropChance      = 100   # Probabilidade de drop (1–100%)
+BerserkerOnly   = false # true = só dropa em modo berserk
+MasterClientOnly = true  # Recomendado: true (evita duplicatas)
+EnableDebugLogging = false
+[/code]
+
+Edite em: [font=Courier New]BepInEx/config/com.hiarlyscripter.huntsmanloot.cfg[/font]
+
+[size=4][b]Instalação[/b][/size]
+
+[list=1]
+[*]Instale o [url=https://thunderstore.io/c/repo/p/BepInEx/BepInExPack/]BepInEx 5.4.2305[/url]
+[*]Coloque o DLL em [font=Courier New]BepInEx/plugins/HiarlyScripter-HuntsmanLoot/HuntsmanLoot.dll[/font]
+[*]Inicie o jogo — o arquivo de config é criado automaticamente na primeira execução
+[/list]
+
+[b]Multiplayer:[/b] Apenas o host precisa instalar para o drop funcionar. Recomendado que todos instalem para evitar inconsistências visuais.
+
+[size=4][b]Limitação conhecida[/b][/size]
+
+Por usar a base funcional da shotgun nativa, pode haver leve clipping visual em paredes e cantos. Não afeta o gameplay.
+
+[line]
+
+[size=5][b]🇺🇸 English[/b][/size]
+
+[size=4][b]What does this mod do?[/b][/size]
+
+Makes the Huntsman enemy drop his own weapon ([b]Huntsman Rifle[/b]) when he dies.
+
+The dropped weapon uses the [b]game's native Hunter Gun mesh[/b] at runtime — no extracted assets bundled, no reference mod assets copied. Clean runtime reference only.
+
+[size=4][b]Features[/b][/size]
+[list]
+[*][b]Real visual[/b] — native Hunter Gun mesh with original game color and material
+[*][b]Correct name[/b] — "Huntsman Rifle" in inventory and UI
+[*][b]Real icon[/b] — rendered by native [i]SemiIconMaker[/i] system (not a procedural sprite)
+[*][b]Real ammo[/b] — via [font=Courier New]ItemBattery.batteryLifeInt / batteryBars[/font] (randomized on drop)
+[*][b]Real collision[/b] — BoxCollider from actual mesh bounds
+[*][b]Multiplayer[/b] — drop via PhotonNetwork, visible for all players in room
+[*][b]Berserk mode[/b] — optional berserk-Huntsman-only drops
+[*][b]Zero extra dependencies[/b] — only BepInEx required
+[/list]
+
+[size=4][b]Configuration[/b][/size]
+
+[code]
+[HuntsmanLoot]
+DropChance       = 100   # Drop probability (1–100%)
+BerserkerOnly    = false # true = berserk-only drop
+MasterClientOnly = true  # Recommended: true (prevents duplicates)
+EnableDebugLogging = false
+[/code]
+
+Edit at: [font=Courier New]BepInEx/config/com.hiarlyscripter.huntsmanloot.cfg[/font]
+
+[size=4][b]Installation[/b][/size]
+
+[list=1]
+[*]Install [url=https://thunderstore.io/c/repo/p/BepInEx/BepInExPack/]BepInEx 5.4.2305[/url]
+[*]Place the DLL at [font=Courier New]BepInEx/plugins/HiarlyScripter-HuntsmanLoot/HuntsmanLoot.dll[/font]
+[*]Launch the game — the config file is created automatically on first run
+[/list]
+
+[b]Multiplayer:[/b] Only the host needs the mod for drops to work. All players installing is recommended for consistent visuals.
+
+[size=4][b]Known limitation[/b][/size]
+
+Being a long weapon using the native shotgun's functional base, minor visual clipping may occur at walls/corners. Does not affect gameplay.
+
+[line]
+
+[size=2][color=#3a6a50]HuntsmanLoot by HiarlyScripter · BepInEx 5.4.23.5 · R.E.P.O. Build 23250495[/color][/size]
