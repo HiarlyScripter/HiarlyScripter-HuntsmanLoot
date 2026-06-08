@@ -2,18 +2,22 @@
 
 ---
 
-## v1.1.3 — 2026-05-20
+## v1.1.3 — 2026-06-07
 **Compatibilidade:** R.E.P.O. Build `23250495` · BepInEx `5.4.23.5`
 
-### Adicionado
-- Config `RandomizeAmmo` — a espingarda pode cair com quantidade aleatória de balas (1 até o máximo); desative para sempre cair cheia
+### Visual real da Huntsman Rifle
+- A arma dropada agora usa a mesh nativa `Hunter Gun` do próprio jogo — sem empacotar asset extraído do jogo
+- Nome do item exibido como **Huntsman Rifle** no inventário
+- Visual aprovado com cor e material nativos; transform calibrado para orientação correta no drop
+- Ícone do inventário corrigido com render real da arma via sistema nativo do jogo (sem sprite procedural)
 
 ### Corrigido
-- Espingarda agora dropa corretamente — nome do item no registro do jogo é `"Item Gun Shotgun"`, não `"item_gun_shotgun"`
-- Drop no singleplayer usa `Resources.Load` em vez de `Object.Instantiate` direto (Item é ScriptableObject, não MonoBehaviour)
-- Drop no multiplayer usa `resourcePath = "Items/Item Gun Shotgun"` confirmado via `PrefabRef` do jogo
-- Barra de bateria verde suprimida corretamente — patch movido para `ItemBattery.Start()` com verificação via `gameObject.name` (correção: Item é ScriptableObject, `GetComponentInParent<Item>()` sempre retornava null)
-- Warning `"Item 'Gun Hunter' not found in the itemDictionary"` suprimido — bug do próprio jogo ao inicializar o Huntsman; não afeta funcionalidade
+- Ammo corrigida: o valor real de munição é `ItemBattery.batteryLifeInt`/`batteryBars`, não `numberOfBullets` (que é pellets por disparo)
+- Collision envelope corrigido: BoxCollider único baseado nos bounds reais da mesh, sem MeshCollider
+- Barra de bateria verde suprimida corretamente no item dropado
+
+### Limitação conhecida
+- Por usar a base funcional da shotgun nativa, pode haver clipping visual leve em parede/canto; não afeta o gameplay
 
 ---
 

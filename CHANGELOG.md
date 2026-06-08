@@ -1,11 +1,35 @@
 # Changelog — Huntsman Loot
 
-## Proxima release (nao publicada) - 2026-06-07
-- Corrigido o icone da Huntsman Rifle no inventario usando render real via `SemiIconMaker`.
-- Ajustado o enquadramento da camera de icone para mostrar a arma dentro do quadrado, em vez de apenas o cano.
-- Corrigida a orientacao do icone invertendo o vetor `upWorld`/roll da camera, sem alterar o enquadramento aprovado.
-- Removida a rota de sprite runtime desenhado/procedural para o icone.
-- Teste visual aprovado e `LogOutput.log` sem erros relacionados ao HuntsmanLoot.
+## v1.1.3 — 2026-06-07
+
+### Visual real da Huntsman Rifle
+- A arma dropada agora usa a mesh nativa `Hunter Gun` do proprio jogo via referencia runtime — sem empacotar mesh extraida do jogo, sem copiar asset de mod de referencia.
+- Visual aprovado: `localPosition=(0,0,0)`, `localEuler=(-8,180,90)`, `localScale=(0.75,0.75,0.75)`.
+- Cor e material normalizados via native-clone do prefab nativo.
+- Nome do item agora aparece como **Huntsman Rifle** no inventario.
+
+### Icone corrigido
+- Icone do inventario corrigido com render real via `SemiIconMaker`.
+- Enquadramento da camera de icone ajustado para mostrar a arma inteira dentro do quadrado, em vez de apenas o cano.
+- Orientacao corrigida invertendo o vetor `upWorld` da camera, sem alterar zoom ou enquadramento.
+- Removida rota de sprite procedural/desenhado em runtime.
+
+### Ammo real corrigida
+- `ItemGun.numberOfBullets` nao era ammo — e quantidade de pellets/projeteis por disparo. Corrigido.
+- Ammo real e `ItemBattery.batteryLifeInt`; maximo real e `ItemBattery.batteryBars`.
+- Correcao aplicada via marker + postfix em `ItemBattery.Start` para evitar reset para cheio.
+
+### Collision envelope
+- BoxCollider unico baseado em `mesh.bounds` do visual.
+- Sem MeshCollider, sem Rigidbody novo, sem trigger.
+- `attachedRigidbody` confirmado presente.
+
+### Qualidade
+- Logs de diagnostico limpos; `EnableDebugLogging` desativado no perfil de teste.
+- Build Release: 0 erros / 0 warnings.
+
+### Limitacao conhecida
+- Por ser uma arma longa usando a base funcional da shotgun nativa, pode haver clipping visual leve em parede/quina. Nao afeta gameplay.
 
 ## v1.1.1 (2026-05-19)
 - Corrigida barra verde (bateria) que aparecia sobre a arma no chão e nunca depleta

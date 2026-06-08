@@ -6,25 +6,27 @@
 [![Multiplayer](https://img.shields.io/badge/Multiplayer-Host%20Only-9b59b6?style=flat-square)]()
 [![REPOConfig](https://img.shields.io/badge/REPOConfig-compatível-orange?style=flat-square)](https://thunderstore.io/c/repo/p/nickklmao/REPOConfig/)
 
-> O Huntsman agora **paga um preço** quando você o elimina — ele larga sua espingarda no chão!
+> O Huntsman agora **paga um preço** quando você o elimina — ele larga a própria arma no chão!
 
 ---
 
 ## ✨ O que faz
 
-O **Huntsman Loot** faz o Huntsman dropar sua espingarda ao ser eliminado. A arma usada é o item nativo do próprio jogo (`item_gun_shotgun`) — **sem dependência de nenhum outro mod**.
+O **Huntsman Loot** faz o Huntsman dropar a **Huntsman Rifle** ao ser eliminado. A arma usa a mesh nativa `Hunter Gun` do próprio jogo via referência runtime — **sem empacotar assets, sem dependência de outros mods**.
 
 ---
 
 ## 🎯 Funcionalidades
 
-- 🔫 **Drop ao morrer** — a espingarda cai exatamente onde o Huntsman morreu
+- 🔫 **Drop ao morrer** — a Huntsman Rifle cai exatamente onde o Huntsman morreu
+- 🎨 **Visual real** — a arma usa a mesh nativa do Hunter Gun do jogo, com cor e material nativos
+- 🏷️ **Nome correto** — aparece como **Huntsman Rifle** no inventário, com ícone real gerado pelo jogo
 - 🎲 **Chance configurável** — de **1%** (raridade extrema) a **100%** (sempre dropa)
 - 💀 **Modo Berserk** — drop exclusivo de Huntsmans em modo berserk *(requer BerserkerEnemies, opcional)*
 - 👑 **Processado pelo host** — só o host processa o drop; a arma aparece para **todos na sala**
-- 🔧 **Zero dependências extras** — usa o item nativo do jogo, nada mais
-- 🎰 **Munição aleatória** — a espingarda dropa com quantidade de balas aleatória entre 1 e o máximo; desative nas configs para sempre cair cheia
-- 🟢 **Sem barra verde falsa** — a barra de bateria desnecessária foi removida da arma; a barra de munição (amarela) funciona normalmente, inclusive ao recarregar com cristal
+- 🔧 **Zero dependências extras** — usa apenas assets nativos do jogo
+- 🎰 **Munição aleatória** — a arma dropa com quantidade de balas aleatória entre 1 e o máximo; desative nas configs para sempre cair cheia
+- 🟢 **Sem barra verde falsa** — a barra de bateria desnecessária foi removida; a barra de munição (amarela) funciona normalmente
 - ⚙️ **REPOConfig** — todos os configs editáveis dentro do jogo *(opcional)*
 
 ---
