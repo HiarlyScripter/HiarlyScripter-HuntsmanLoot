@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace HuntsmanLoot
 {
-    [BepInPlugin("com.hiarlyscripter.huntsmanloot", "Huntsman Loot", "1.1.3")]
+    [BepInPlugin("com.hiarlyscripter.huntsmanloot", "Huntsman Loot", "1.1.4")]
     public sealed class HuntsmanLootPlugin : BaseUnityPlugin
     {
         internal static HuntsmanLootPlugin Instance { get; private set; }
@@ -65,7 +65,7 @@ namespace HuntsmanLoot
             LogReflectionStatus();
 
             new Harmony("com.hiarlyscripter.huntsmanloot").PatchAll(typeof(HuntsmanPatches));
-            Log.LogInfo("[HuntsmanLoot] v1.1.3 carregado. Patch Harmony aplicado.");
+            Log.LogInfo("[HuntsmanLoot] v1.1.4 carregado. Patch Harmony aplicado.");
         }
 
         internal static bool DebugLoggingEnabled => EnableDebugLogging != null && EnableDebugLogging.Value;

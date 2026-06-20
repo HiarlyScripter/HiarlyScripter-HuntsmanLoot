@@ -1,5 +1,11 @@
 # DEVLOG — Huntsman Loot (HiarlyScripter)
 
+## v1.1.4 — 2026-06-20
+
+Branding update. Novo ícone 256×256 via Canva (chapéu deerstalker + espingarda no chão escuro, glow teal). Assets de publicação gerados: banner Thunderstore (1300×372), header Nexus Mods (1280×720), 3 imagens de galeria (1920×1080). Nenhuma mudança no Core.cs. thunderstore.toml teve encoding de acentos corrigido (UTF-8 sem BOM, via `WriteAllText`).
+
+---
+
 ## Contexto
 
 Este mod foi desenvolvido como substituto 100% original ao `DougHRito-HunterDropsGun` v1.0.7, que parou de funcionar com REPO v0.4.x. O código foi escrito do zero, sem reaproveitamento de código-fonte do mod original.

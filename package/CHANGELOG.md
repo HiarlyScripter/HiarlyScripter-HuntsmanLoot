@@ -2,6 +2,25 @@
 
 ---
 
+## v1.1.4 — 2026-06-20
+**Compatibilidade:** R.E.P.O. Build `23250495` · BepInEx `5.4.23.5`
+
+### 🇧🇷 PT-BR
+
+#### Visual e branding
+- Novo ícone do mod (256×256) — chapéu + espingarda no chão com glow de loot teal
+- Assets de branding adicionados: banner Thunderstore, header Nexus Mods, 3 imagens de galeria (1920×1080)
+
+---
+
+### 🇺🇸 English
+
+#### Visuals & branding
+- New mod icon (256×256) — hat + shotgun on floor with teal loot glow
+- Branding assets added: Thunderstore banner, Nexus Mods header, 3 gallery images (1920×1080)
+
+---
+
 ## v1.1.3 — 2026-06-07
 **Compatibilidade / Compatibility:** R.E.P.O. Build `23250495` · BepInEx `5.4.23.5`
 

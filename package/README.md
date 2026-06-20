@@ -1,6 +1,6 @@
 # 🔫 Huntsman Loot
 
-[![Versão](https://img.shields.io/badge/versão-1.1.3-brightgreen?style=flat-square)](https://thunderstore.io/c/repo/p/HiarlyScripter/HuntsmanLoot/)
+[![Versão](https://img.shields.io/badge/versão-1.1.4-brightgreen?style=flat-square)](https://thunderstore.io/c/repo/p/HiarlyScripter/HuntsmanLoot/)
 [![R.E.P.O.](https://img.shields.io/badge/R.E.P.O.-Build%2023250495-blue?style=flat-square)](https://store.steampowered.com/app/3241660/REPO/)
 [![BepInEx](https://img.shields.io/badge/BepInEx-5.4.23.5-yellow?style=flat-square)](https://thunderstore.io/c/repo/p/BepInEx/BepInExPack/)
 [![Multiplayer](https://img.shields.io/badge/Multiplayer-Host%20Only-9b59b6?style=flat-square)]()
@@ -83,7 +83,7 @@ Edite em `BepInEx/config/com.hiarlyscripter.huntsmanloot.cfg` ou use o **REPOCon
 |---|---|
 | A arma não dropa | Certifique-se de que o **host** tem o mod |
 | A arma dropa várias vezes | Mantenha `MasterClientOnly = true` (padrão) |
-| Barra verde aparece na arma | Atualize para v1.1.3 |
+| Barra verde aparece na arma | Certifique-se de usar a versão mais recente |
 | Ammo aparece errada | Verifique a configuração `RandomizeAmmo` |
 
 ### 📋 Notas técnicas
@@ -171,7 +171,7 @@ Edit at `BepInEx/config/com.hiarlyscripter.huntsmanloot.cfg` or use **REPOConfig
 |---|---|
 | Weapon doesn't drop | Make sure the **host** has the mod |
 | Weapon drops multiple times | Keep `MasterClientOnly = true` (default) |
-| Green bar on weapon | Update to v1.1.3 |
+| Green bar on weapon | Make sure you are using the latest version |
 | Wrong ammo shown | Check the `RandomizeAmmo` setting |
 
 ### 📋 Technical notes
