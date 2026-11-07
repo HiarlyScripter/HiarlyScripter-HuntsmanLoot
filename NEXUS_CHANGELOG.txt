@@ -13,11 +13,11 @@ v1.1.4 — 2026-06-20
 ====================
 
 EN: New mod icon (256x256) — deerstalker hat + shotgun on dark floor with teal loot glow.
-    Branding assets added: Thunderstore banner, Nexus Mods header, gallery images.
+    Branding assets added: mod banner, Nexus Mods header, gallery images.
     No gameplay changes.
 
 PT: Novo ícone (256x256) — chapéu + espingarda no chão escuro com glow de loot teal.
-    Assets de branding adicionados: banner Thunderstore, header Nexus Mods, imagens de galeria.
+    Assets de branding adicionados: banner do mod, header Nexus Mods, imagens de galeria.
     Sem mudanças no gameplay.
 
 ---
@@ -36,7 +36,7 @@ PT: Visual real da Huntsman Rifle usando mesh nativa Hunter Gun em runtime.
 ---
 
 v1.1.1 — 2026-05-19
-    Removed binary obfuscation for Thunderstore compliance.
+    Removed binary obfuscation.
 
 v1.1.0 — 2026-05-19
     Removed DougHRito-HunterGun dependency.
