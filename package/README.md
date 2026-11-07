@@ -1,6 +1,6 @@
 # 🔫 Huntsman Loot
 
-[![Versão](https://img.shields.io/badge/versão-1.1.4-brightgreen?style=flat-square)](https://thunderstore.io/c/repo/p/HiarlyScripter/HuntsmanLoot/)
+[![Versão](https://img.shields.io/badge/versão-1.1.5-brightgreen?style=flat-square)](https://thunderstore.io/c/repo/p/HiarlyScripter/HuntsmanLoot/)
 [![R.E.P.O.](https://img.shields.io/badge/R.E.P.O.-Build%2023250495-blue?style=flat-square)](https://store.steampowered.com/app/3241660/REPO/)
 [![BepInEx](https://img.shields.io/badge/BepInEx-5.4.23.5-yellow?style=flat-square)](https://thunderstore.io/c/repo/p/BepInEx/BepInExPack/)
 [![Multiplayer](https://img.shields.io/badge/Multiplayer-Host%20Only-9b59b6?style=flat-square)]()

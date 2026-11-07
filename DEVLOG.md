@@ -1,3 +1,8 @@
+## 2026-11-06 — Release v1.1.5 (aprovado in-game)
+Bump 1.1.4 → 1.1.5 (manifest, csproj, thunderstore.toml, README, Core.cs). Teste in-game aprovado pelo autor.
+
+---
+
 ## 2026-11-06 — Revalidação para o update do jogo (Unity 6)
 Compila sem erros/avisos contra a build nova; APIs verificadas por decompilação; sem mudanças em `src/`. UNTESTED in-game. Ver `CHECKPOINTS/2026-11-06_update-unity6.md`.
 

@@ -4,7 +4,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "HiarlyScripter"
 name = "HuntsmanLoot"
-versionNumber = "1.1.4"
+versionNumber = "1.1.5"
 description = "Faz o Huntsman largar sua espingarda ao morrer. Chance de drop configurável, suporte a multiplayer e modo berserk. Sem dependências externas além do BepInEx."
 websiteUrl = "https://discord.com/users/hiarly_ferreira"
 containsNsfwContent = false

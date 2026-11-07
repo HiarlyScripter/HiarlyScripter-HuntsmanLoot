@@ -1,5 +1,24 @@
 # Changelog — Huntsman Loot
 
+## v1.1.5 — 2026-11-06
+**Compatibilidade:** R.E.P.O. update de 06/11/2026 (Unity 6000.3.17) · BepInEx `5.4.23.5`
+
+### 🇧🇷 PT-BR
+
+#### Compatibilidade
+- Revalidado para o update do jogo de 06/11/2026 (Unity 6): compila sem erros/avisos e foi testado in-game (drop, visual Hunter Gun, ícone, munição)
+- Sem mudanças de comportamento
+
+---
+
+### 🇺🇸 English
+
+#### Compatibility
+- Revalidated for the 2026-11-06 game update (Unity 6): builds with no errors/warnings and tested in-game (drop, Hunter Gun visual, icon, ammo)
+- No behavior changes
+
+---
+
 ## v1.1.3 — 2026-06-07
 
 ### 🇧🇷 PT-BR

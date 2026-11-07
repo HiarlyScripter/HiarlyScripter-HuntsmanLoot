@@ -1,6 +1,6 @@
 # Checkpoint 2026-11-06 — Revalidação para o update do jogo (Unity 6000.3.17)
 
-**Status: UNTESTED in-game.**
+**Status: Aprovado in-game pelo autor em 2026-11-06 (v1.1.5).**
 
 - Jogo atualizado em 06/11/2026 (Assembly-CSharp.dll 20:55; Unity 6000.3.17f1, antes 2022.3.67).
 - Build do mod (1.1.4, sem alterações em `src/`) compila contra a DLL nova: 0 erros / 0 avisos (netstandard2.1).
