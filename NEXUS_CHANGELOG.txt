@@ -1,3 +1,14 @@
+v1.1.5 — 2026-11-06
+====================
+
+EN: Revalidated for the 2026-11-06 game update (Unity 6). Tested in-game.
+    No gameplay changes.
+
+PT: Revalidado para o update do jogo de 06/11/2026 (Unity 6). Testado in-game.
+    Sem mudanças no gameplay.
+
+---
+
 v1.1.4 — 2026-06-20
 ====================
 

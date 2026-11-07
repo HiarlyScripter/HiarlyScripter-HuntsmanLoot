@@ -1,8 +1,8 @@
-# Nexus Mods Upload Guide — HuntsmanLoot v1.1.4
+# Nexus Mods Upload Guide — HuntsmanLoot v1.1.5
 
 ## Pre-upload checklist
 
-- [ ] Nexus ZIP built: `HuntsmanLoot-v1.1.4-NexusMods.zip`
+- [ ] Nexus ZIP built: `HuntsmanLoot-v1.1.5-NexusMods.zip`
 - [ ] DLL is the Release build (not Debug) — verify size ~40KB
 - [ ] Description copied from `NEXUS_DESCRIPTION.bbcode`
 - [ ] Changelog copied from `NEXUS_CHANGELOG.txt`
@@ -18,7 +18,7 @@ URL: https://www.nexusmods.com/repo/mods/add
 | Field | Value |
 |---|---|
 | Mod name | HuntsmanLoot |
-| Version | 1.1.4 |
+| Version | 1.1.5 |
 | Category | Gameplay — Enemies |
 | Short description | Makes the Huntsman drop his own weapon (Hunter Gun visual) on death. |
 | Tags | BepInEx, Harmony, Drop, Loot, Enemy, Weapon, Multiplayer |
@@ -48,12 +48,12 @@ Nexus supports BBCode. The `[line]`, `[size]`, `[b]`, `[list]`, `[code]`, `[font
 
 ## 4. Files tab
 
-Upload `HuntsmanLoot-v1.1.4-NexusMods.zip` with these settings:
+Upload `HuntsmanLoot-v1.1.5-NexusMods.zip` with these settings:
 
 | Field | Value |
 |---|---|
 | File name | HuntsmanLoot |
-| Version | 1.1.4 |
+| Version | 1.1.5 |
 | File category | Main files |
 | Description | BepInEx plugin DLL — place in BepInEx/plugins/ |
 | Is main file | Yes |
@@ -81,7 +81,6 @@ Paste the content of `NEXUS_CHANGELOG.txt`.
 | BepInExPack for R.E.P.O. | 5.4.2305 | Required |
 
 Nexus link for BepInEx: https://www.nexusmods.com/repo/mods/1  
-*(or link to the Thunderstore page)*
 
 ---
 
